@@ -28,6 +28,9 @@ _default_tnode_fields = (
 
 ptrieStruct = PStruct.mkpstruct('trienode', _default_tnode_fields)
 
+def replace_value(v1, v2):
+    return v2
+
 class Ptrie(object):
     def __init__(self, pstor):
         self.pstor = pstor
@@ -39,11 +42,122 @@ class Ptrie(object):
         return ptrieStruct.getfields(self.pstor, oid)
 
     # A trie is constructed via insertions
-    def insert(self, trie, key, value=None):
-        ''' Insert a (key, value) as a child node into the trie at parent.
-        key is a text key, trie is organized based on the text key '''
-        print "Insert: '%s'" % key
-        return self.orderedInsert(trie, key, value, 0)
+    def insert(self, trie, key, value, mergevalue=replace_value):
+        ''' Insert a (key, value) as a child node into ''trie''.
+        ''key'' is a text key, trie is organized based on the text key.
+        If key exists then the nodes are "merged" '''
+        #print "Insert: '%s'" % key
+        fields = {'prefix': key, 'value': value, 'final': True,
+                  'lcp': Nulltrie, 'rsp': Nulltrie}
+        if not trie:
+            return self._create_trie_branch(0, fields)
+        return self._insert(trie, fields, mergevalue)
+
+    def _insert(self, trie, nodefields, mergevalue):
+        ''' Insert a trie node with ''nodefields'' into a trie. '''
+        pfinder = PtriePathFinder(self, trie)
+        pfinder.search(nodefields['prefix'])
+        #print pfinder.path
+        # The last of node of the search path is either a trie node if the key
+        # exists, or Nulltrie if key doesn't.
+        if pfinder.target:
+            # key exists, needs merging.
+            newnode = self.makeTnode(
+                prefix=nodefields['prefix'],
+                value=nodefields['value'],
+                final=nodefields['final'],
+                lcp=nodefields['lcp'],
+                rsp=nodefields['rsp'])
+            newnode = self._merge_tnodes(pfinder.target, newnode, mergevalue)
+        else:
+            # Need to create a new trie node
+            pn, rel = PtriePathFinder.decode_path_mark(pfinder.path[0])
+            pn_f = self.getfields(pn)
+            if rel == 'rsp':
+                # new node is on the sibling chain
+                pos = len(pn_f['prefix'])
+                rsp = pn_f['rsp']
+            elif rel == 'lcp':
+                # new node is the lcp
+                pos = len(pn_f['prefix']) + 1
+                rsp = pn_f['lcp']
+            newnode = self._create_trie_branch(pos, nodefields)
+            # Now append the rsp determined from above to the newnode
+            fields = self.getfields(newnode)
+            newnode = self.makeTnode(
+                prefix=fields['prefix'],
+                value=fields['value'],
+                final=fields['final'],
+                lcp=fields['lcp'],
+                rsp=rsp)
+        # Now reconstruct the search path
+        return pfinder.retrace(newnode)
+
+    def merge_trie(self, t1, t2, mergevalue=replace_value):
+        ''' Merges two tries into one '''
+        if not t1: return t2
+        if not t2: return t1
+        f1 = self.getfields(t1)
+        f2 = self.getfields(t2)
+        # The trie with the shorter prefix is the "parent" trie (tp), the one
+        # with the longer prefix will be the "child" trie (tc). tc will be
+        # inserted into tp.
+        if len(f1['prefix']) < len(f2['prefix']):
+            tp = t1; fp = f1; tc = t2; fc = f2
+        elif len(f2['prefix']) < len(f1['prefix']):
+            tp = t2; fp = f2; tc = t1; fc = f1
+        else:
+            if f1['prefix'] == f2['prefix']:
+                return self._merge_tnodes(t1, t2, mergevalue)
+            elif f1['prefix'] < f2['prefix']:
+                tp = t1; fp = f1; tc = t2; fc = f2
+            else:
+                tp = t2; fp = f2; tc = t1; fc = f1
+        # height(tc) >= height(tp)
+        return self._insert(tp, fc, mergevalue)
+        
+    def _merge_tnodes(self, tn1, tn2, mergevalue=replace_value):
+        ''' Merges tries tn1 and tn2 into one. tn1 and tn2 must have the same
+        prefix (key) '''
+        f1 = self.getfields(tn1)
+        f2 = self.getfields(tn2)
+        assert(f1['prefix'] == f2['prefix'])
+        final = f1['final'] or f2['final']
+        # Simply add up the values - This should be customizable
+        if f1['final'] and f2['final']:
+            value = mergevalue(f1['value'], f2['value'])
+        elif f1['final']:
+            value = f1['value']
+        elif f2['final']:
+            value = f2['value']
+        else:
+            value = None
+        rsp = self.merge_trie(f1['rsp'], f2['rsp'], mergevalue)
+        lcp = self.merge_trie(f1['lcp'], f2['lcp'], mergevalue)
+        return self.makeTnode(prefix=f1['prefix'], value=value, final=final,
+                              lcp=lcp, rsp=rsp)
+
+    def _create_trie_branch(self, pos, fields):
+        ''' Creat a trie branch whose leaf is specified by ''fields''. Branch
+        creation starts from ''pos'' of the prefix of the leaf node. '''
+        key = fields['prefix']
+        if pos > len(key):
+            raise ValueError("pos %d is out of bounds for key %s" % (pos, key))
+        # Create leaf node first, then work backwards
+        node = fields['lcp']
+        p = len(key)
+        while p >= pos:
+            val = None
+            final = False
+            rsp = Nulltrie
+            if p == len(key): # leaf node
+                val = fields['value']
+                final = fields['final']
+                rsp = fields['rsp']
+            node = self.makeTnode(prefix=key[0:p], value=val, final=final,
+                                  lcp=node, rsp=rsp)
+            p -= 1
+        return node
 
     ##
     # This is the recursive function illustrating the gist of the algorithm
@@ -147,60 +261,41 @@ class Ptrie(object):
         if not trie:
             return None
         fields = self.getfields(trie)
-        # findByPosition assumes that search positions for key and trie node
-        # matches
         if len(fields['prefix']) != 0:
             raise RuntimeError("Search must start from root")
-        return self.findByPosition(trie, key, 0, finalOnly)
-
-    @staticmethod
-    def markstrpos(string, endpos):
-        ''' Marks the character at endpos-1 with a pair of parens '''
-        if endpos < 0 or endpos > len(string):
-            raise KeyError("endpos %d is out of range for %s"
-                           % (endpos, string))
-        if endpos == 0:
-            return ("()" + string)
-        front = string[:endpos-1]
-        mid = "(" + string[endpos-1:endpos] + ")"
-        back = string[endpos:]
-        return front + mid + back
-                           
-    def findByPosition(self, trie, key, endpos, finalOnly):
-        ''' Find a trie node whose prefix at position endpos-1 is equal to
-        key[endpos-1], assuming that key[0:endpos] already matched previous
-        trie nodes in the path '''
-        #print "findByPosition(%s %s %d)" % (trie, key, endpos)
-        if not trie:
-            # This means we are at the end of a sibling chain without
-            # having found a match
-            return Nulltrie
-        targetkey = key[endpos-1:endpos]
-        fields = self.getfields(trie)
-        triekey = fields['prefix'][endpos-1:endpos]
-        #print "%s <=> %s" % (Ptrie.markstrpos(key, endpos), fields['prefix'])
-        if targetkey == triekey:
-            # This position is a match, now move on the next position, starting
-            # from the first child of this trie node.
-            if endpos == len(key):
-                # endpos is the last position: the whole key is matched
-                if (not finalOnly) or fields['final']:
-                    return trie
-                else:
-                    return Nulltrie
-            return self.findByPosition(fields['lcp'], key, endpos+1, finalOnly)
-        elif targetkey > triekey:
-            # no match yet, go down the sibling chain and try again.
-            return self.findByPosition(fields['rsp'], key, endpos, finalOnly)
-        else:
-            # siblings are ordered by key, so this means the target key is not
-            # present
-            return Nulltrie
+        pfinder = PtriePathFinder(self, trie)
+        pfinder.search(key)
+        #print pfinder.path
+        if pfinder.target:
+            fields = self.getfields(pfinder.target)
+            if (not finalOnly) or fields['final']:
+                return pfinder.target
+        return Nulltrie
 
     def delete(self, trie, key):
         ''' Deletes a trie node whose prefix matches key from the trie. '''
-        return self.deleteByPosition(trie, key, 0)
-    
+        pfinder = PtriePathFinder(self, trie)
+        pfinder.search(key)
+        if not pfinder.target: # not found, no change
+            return trie
+        # Need to reconstruct new trie with the target removed
+        fields = self.getfields(pfinder.target)
+        if not fields['final']: # This is an intermediate node, doesn't count
+            return trie
+        # This is true match. Now if the trie node has children,
+        # then the node is kept but its 'final' bit is marked off.
+        # Otherwise remove the node and returns its right sibling.
+        if fields['lcp']:
+            newnode = self.makeTnode(
+                prefix=fields['prefix'],
+                value=fields['value'],
+                final=False,
+                lcp=fields['lcp'],
+                rsp=fields['rsp'])
+        else:
+            newnode = fields['rsp']
+        return pfinder.retrace(newnode)
+            
     # Recursive
     def deleteByPosition(self, trie, key, endpos):
         ''' Deletes a trie node whose prefix[endpos:] matches key[endpos:].
@@ -257,4 +352,105 @@ class Ptrie(object):
         else:
             # not found
             return trie
+
+
+class PtriePathFinder(object):
+    ''' A Helper class that specializes in finding a node in a ptrie and saves
+    the path leading to the node. Also helps in reconstructing a new ptrie
+    if the ptrie is changed '''
+    def __init__(self, ptrieObj, tnode):
+        self._ptrieObj = ptrieObj
+        self._root = tnode
+
+    def search(self, key):
+        ''' Searches and establishes a search path leading to the target. '''
+        self.path = []
+        self.target = Nulltrie
+        if not self._root:
+            # Empty trie: return empty path.
+            return
+        fields = self._ptrieObj.getfields(self._root)
+        startpos = len(fields['prefix'])
+        if startpos > len(key):
+            raise ValueError("Key length must be at least that of the root (%d)"
+                             % startpos)
+        # Path is a reversed list of nodes on the search path
+        trie = self._root
+        # ''pos'' is the end position of the key that is matched so far. In
+        # other words, key[0:pos] is already matched.
+        pos = startpos
+        while pos <= len(key):
+            #print "pos: %d trie: %s" % (pos, trie)
+            if not trie:
+                return
+            targetkey = key[pos-1:pos]
+            fields = self._ptrieObj.getfields(trie)
+            triekey = fields['prefix'][pos-1:pos]
+            #print "%s <=> %s" % (PtriePathFinder.markstrpos(key, pos),
+                                 #fields['prefix'])
+            if targetkey == triekey:
+                # This position is a match, now move on the next position,
+                #starting from the first child of this trie node.
+                self.path.insert(0, PtriePathFinder.make_path_mark(
+                        trie, "lcp"))
+                trie = fields['lcp']
+                pos += 1
+            elif targetkey > triekey:
+                # Search next sibling at the same position
+                self.path.insert(0, PtriePathFinder.make_path_mark(
+                        trie, "rsp"))
+                trie = fields['rsp']
+            else:
+                # siblings are ordered by key, so this means the target key is
+                # not present
+                return
+        # If a match is found, remove it from the path and save it
+        self.target, rel = self.path.pop(0)
+
+    def retrace(self, newnode):
+        ''' retrace back the search path and reconstruct a new trie along the
+        way. ''newnode'' is the new trie node at the end of the path (But will
+        be attached to the new trie first). '''
+        newroot = newnode
+        for pmark in self.path:
+            pn, rel = PtriePathFinder.decode_path_mark(pmark)
+            pn_f = self._ptrieObj.getfields(pn)
+            if rel == 'rsp':
+                newroot = self._ptrieObj.makeTnode(
+                    prefix=pn_f['prefix'],
+                    value=pn_f['value'],
+                    final=pn_f['final'],
+                    lcp=pn_f['lcp'],
+                    rsp=newroot)
+            elif rel == 'lcp':
+                newroot = self._ptrieObj.makeTnode(
+                    prefix=pn_f['prefix'],
+                    value=pn_f['value'],
+                    final=pn_f['final'],
+                    lcp=newroot,
+                    rsp=pn_f['rsp'])
+            else:
+                raise RuntimeError("Invalid Path Marker: %s" % rel)
+        return newroot
+
+    @staticmethod
+    def make_path_mark(node, next):
+        return (node, next,)
+
+    @staticmethod
+    def decode_path_mark(pm):
+        return (pm[0], pm[1],)
+
+    @staticmethod
+    def markstrpos(string, endpos):
+        ''' Marks the character at endpos-1 with a pair of parens '''
+        if endpos < 0 or endpos > len(string):
+            raise KeyError("endpos %d is out of range for %s"
+                           % (endpos, string))
+        if endpos == 0:
+            return ("()" + string)
+        front = string[:endpos-1]
+        mid = "(" + string[endpos-1:endpos] + ")"
+        back = string[endpos:]
+        return front + mid + back
 

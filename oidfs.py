@@ -61,6 +61,7 @@ class OidFS(object):
 
     def save(self, oid, oidname):
         ''' Save an OID as oidname in our database '''
+        print "Saving %s into %s" % (oid, self.__rootoid)
         self.__rootoid = self.__ptrieObj.insert(self.__rootoid, oidname, oid)
         # garbage collect
         self.__rootoid, = self.__oidPstor.keepOids([self.__rootoid])
@@ -70,8 +71,13 @@ class OidFS(object):
         ''' Find an OID based on oidname (that was used to save the OID
         originally '''
         oidnode = self.__ptrieObj.find(self.__rootoid, oidname)
+        if not oidnode:
+            return ptrie.Nulltrie
         fields = self.__ptrieObj.getfields(oidnode)
         return fields['value']
 
     def delete(self, oidname):
         self.__rootoid = self.ptrieObj.delete(self.__rootoid, oidname)
+        # garbage collect
+        self.__rootoid, = self.__oidPstor.keepOids([self.__rootoid])
+        self.__writeRootoid(self.__rootoid)

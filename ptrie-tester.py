@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import os
 import testpds
@@ -23,9 +25,10 @@ class PtrieTester(object):
         for w in words:
             wnode = self.ptrieObj.find(self.root, w)
             if not wnode:
-                print "Error: Cannot find %s" % w
+                print "Cannot find %s" % w
             else:
-                print "Found %s at %s" % (w, wnode)
+                fields = self.ptrieObj.getfields(wnode)
+                print "Found %s (%d) at %s" % (w, fields['value'], wnode)
 
     def delete(self, word):
         newroot = self.ptrieObj.delete(self.root, word)
@@ -38,7 +41,7 @@ class PtrieTester(object):
     def printNode(self, node):
         f = self.ptrieObj.getfields(node)
         if f['final']:
-            print "(", f['prefix'], ")"
+            print "(%s : %s)" % (f['prefix'], f['value'])
 
     def makeBFSPrintFunc(self, initialLevel=-1):
         env = {'level': initialLevel}
@@ -46,8 +49,9 @@ class PtrieTester(object):
             fields = self.ptrieObj.getfields(tn)
             prefix = fields['prefix']
             if fields['final']:
-                pfxString = "( " + prefix + " )"
+                pfxString = "(%s : %s)" % (fields['prefix'], fields['value'])
             else:
+                assert(fields['value'] is None)
                 pfxString = prefix
             if len(prefix) != env['level']:
                 env['level'] += 1
@@ -58,9 +62,17 @@ class PtrieTester(object):
     def bfwalk(self):
         self.ptrieObj.bfsearch(self.root, self.makeBFSPrintFunc(-1))
 
+    @staticmethod
+    def add(v1, v2):
+        return v1 + v2
+
     def testloop(self):
         while True:
-            inputtext = raw_input(">> ");
+            try:
+                inputtext = raw_input(">> ");
+            except EOFError as e:
+                print "Goodbye!"
+                return
             args = inputtext.split()
             if len(args) == 0:
                 cmd = "help"
@@ -85,17 +97,21 @@ help quit read load find delete insert dfwalk bfwalk gc save"""
                 print words
                 # Insert words into trie
                 for w in words:
-                    self.root = self.ptrieObj.insert(self.root, w)
+                    self.root = self.ptrieObj.insert(
+                        self.root, w, 1, PtrieTester.add)
             elif cmd == "load":
                 # Load a previously saved ptrie
                 oidname = args[0]
                 self.root = self.oidfs.find(oidname)
+                if not self.root:
+                    print "Not found: %s" % oidname
             elif cmd == "find":
                 self.findWords(args)
             elif cmd == "delete":
                 self.delete(args[0])
             elif cmd == "insert":
-                self.root = self.ptrieObj.insert(self.root, args[0])
+                self.root = self.ptrieObj.insert(
+                    self.root, args[0], 1, PtrieTester.add)
             elif cmd == "dfwalk":
                 print "Depth-First Walk:"
                 self.ptrieObj.dfSearch(self.root, self.printNode)
@@ -105,8 +121,7 @@ help quit read load find delete insert dfwalk bfwalk gc save"""
             elif cmd == "gc":
                 # Do a garbage collection
                 print "Garbage Collecting..."
-                node_sho = self.ptrieObj.find(self.root, "sho", False)
-                self.root, node_sho = self.pstor.keepOids([self.root, node_sho])
+                self.root, = self.pstor.keepOids([self.root])
             elif cmd == "save":
                 # Save the root in oidfs
                 if len(args):
@@ -114,6 +129,12 @@ help quit read load find delete insert dfwalk bfwalk gc save"""
                 else:
                     oidname = "examplePtrie"
                 self.oidfs.save(self.root, oidname)
+            elif cmd == "remove-file":
+                if len(args):
+                    oidname = args[0]
+                else:
+                    oidname = "examplePtrie"
+                self.oidfs.delete(self.root, oidname)
             else:
                 print "Bad command: type 'quit' to quit"
 
