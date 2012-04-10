@@ -2,11 +2,13 @@
 
 import os
 from pstructstor import PStructStor
+from oidfs import OidFS
 
-def getPStor(testpds_path="/home/ning/Dropbox/run/testpds/fixszPDS001"):
+def init_testpds(testpds_path="/home/ning/run/testpds"):
     if not os.path.isdir(testpds_path):
         os.mkdir(testpds_path)
-    pstor = PStructStor(testpds_path)
-    print pstor
-    return pstor
+    pstor = PStructStor(os.path.join(testpds_path, "pstor"))
+    oidfs = OidFS(os.path.join(testpds_path, "oidfs"))
+    print "Testpds: initialized %s" % testpds_path
+    return (pstor, oidfs)
 

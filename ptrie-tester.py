@@ -8,12 +8,14 @@ from ptrie import Ptrie
 from oidfs import OidFS
 
 class PtrieTester(object):
-    def __init__(self):
-        # Get a PStructStor
-        self.pstor = testpds.getPStor()
+    def __init__(self, pdspath="/home/ning/run/testpds"):
+        # Get a PStructStor and Oidfs
+        self._reinit(pdspath)
+
+    def _reinit(self, pdspath):
+        self.pstor, self.oidfs = testpds.init_testpds(pdspath)
         self.ptrieObj = Ptrie(self.pstor)
         self.root = ptrie.Nulltrie # Start with Nulltrie as root
-        self.oidfs = OidFS("/home/ning/Dropbox/run/testoidfs")
 
     def run(self):
         # start test loop
@@ -62,16 +64,13 @@ class PtrieTester(object):
     def bfwalk(self):
         self.ptrieObj.bfsearch(self.root, self.makeBFSPrintFunc(-1))
 
-    @staticmethod
-    def add(v1, v2):
-        return v1 + v2
-
     def testloop(self):
         while True:
             try:
                 inputtext = raw_input(">> ");
             except EOFError as e:
                 print "Goodbye!"
+                self.oidfs.gc()
                 return
             args = inputtext.split()
             if len(args) == 0:
@@ -81,13 +80,25 @@ class PtrieTester(object):
 
             if cmd == "help":
                 print """Type a command. Commands are:
-help quit read load find delete insert dfwalk bfwalk gc save"""
+help quit read load find delete insert dfwalk bfwalk gc save ls"""
             elif cmd == "quit":
                 ans = raw_input("Save? (y/n)")
                 if ans == "y":
                     self.oidfs.save(self.root, "examplePtrie")
+                    self.oidfs.gc()
                     print "Ptrie saved as \"examplePtrie\""
                 break
+            elif cmd == "print":
+                try:
+                    print eval(args[0])
+                except Exception as e:
+                    print e
+            elif cmd == "reinit":
+                pdspath = args[0]
+                if os.path.exists(pdspath) and os.path.isabs(pdspath):
+                    self._reinit(pdspath)
+                else:
+                    print "Must be an existing absolute path!"
             elif cmd == "read":
                 # Insert words from a list
                 fobj = open(args[0])
@@ -110,8 +121,12 @@ help quit read load find delete insert dfwalk bfwalk gc save"""
             elif cmd == "delete":
                 self.delete(args[0])
             elif cmd == "insert":
-                self.root = self.ptrieObj.insert(
-                    self.root, args[0], 1, PtrieTester.add)
+                if len(args) == 1:
+                    self.root = self.ptrieObj.insert(
+                        self.root, args[0], 1, lambda v1, v2: v1 + v2)
+                elif len(args) == 2:
+                    self.root = self.ptrieObj.insert(
+                        self.root, args[0], args[1], lambda v1, v2: v2)
             elif cmd == "dfwalk":
                 print "Depth-First Walk:"
                 self.ptrieObj.dfSearch(self.root, self.printNode)
@@ -120,8 +135,10 @@ help quit read load find delete insert dfwalk bfwalk gc save"""
                 self.bfwalk()
             elif cmd == "gc":
                 # Do a garbage collection
-                print "Garbage Collecting..."
+                print "Garbage Collecting pstor"
                 self.root, = self.pstor.keepOids([self.root])
+                print "Garbage Collecting oidfs"
+                self.oidfs.gc()
             elif cmd == "save":
                 # Save the root in oidfs
                 if len(args):
@@ -129,12 +146,14 @@ help quit read load find delete insert dfwalk bfwalk gc save"""
                 else:
                     oidname = "examplePtrie"
                 self.oidfs.save(self.root, oidname)
+            elif cmd == "ls":
+                self.oidfs.lsoid()
             elif cmd == "remove-file":
                 if len(args):
                     oidname = args[0]
                 else:
                     oidname = "examplePtrie"
-                self.oidfs.delete(self.root, oidname)
+                self.oidfs.delete(oidname)
             else:
                 print "Bad command: type 'quit' to quit"
 

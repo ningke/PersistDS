@@ -283,17 +283,40 @@ class Ptrie(object):
         if not fields['final']: # This is an intermediate node, doesn't count
             return trie
         # This is true match. Now if the trie node has children,
-        # then the node is kept but its 'final' bit is marked off.
-        # Otherwise remove the node and returns its right sibling.
+        # then the node is kept but its 'final' bit is marked off and the
+        # ''value'' field is set to None. Otherwise remove the node and
+        # returns its right sibling.
         if fields['lcp']:
             newnode = self.makeTnode(
                 prefix=fields['prefix'],
-                value=fields['value'],
+                value=None,
                 final=False,
                 lcp=fields['lcp'],
                 rsp=fields['rsp'])
         else:
             newnode = fields['rsp']
+        # Delete any "hanging" branch - an internal (non-final) node with
+        # no children
+        while not newnode:
+            # Go up the path
+            if len(pfinder.path) == 0:
+                break
+            # Peek at path head
+            pmark = pfinder.path[0]
+            predecessor, rel = PtriePathFinder.decode_path_mark(pmark)
+            fields = self.getfields(predecessor)
+            print "<%s -> %s> (lcp %s rsp %s)" % \
+                (fields['prefix'], rel, fields['lcp'], fields['rsp'])
+            # Predecessor is either
+            # 1) a final node or
+            # 2) an internal node with an lcp and that lcp is not the delete
+            #    target (if delete target is the lcp of predecessor then
+            #    fields['lcp'] points to the "old" deletion target)
+            if fields['final'] or (rel != 'lcp' and fields['lcp']):
+                break # stop here
+            # Predecessor is an internal node with no children
+            newnode = fields['rsp']
+            pfinder.path.pop(0)
         return pfinder.retrace(newnode)
             
     # Recursive
