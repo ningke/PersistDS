@@ -71,6 +71,8 @@ class PtrieTester(object):
             except EOFError as e:
                 print "Goodbye!"
                 self.oidfs.gc()
+                self.oidfs.close()
+                self.pstor.close()
                 return
             args = inputtext.split()
             if len(args) == 0:
@@ -84,8 +86,10 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
             elif cmd == "quit":
                 ans = raw_input("Save? (y/n)")
                 if ans == "y":
+                    self.root, = self.pstor.keepOids([self.root])
                     self.oidfs.save(self.root, "examplePtrie")
                     self.oidfs.gc()
+                    self.pstor.close()
                     print "Ptrie saved as \"examplePtrie\""
                 break
             elif cmd == "print":
@@ -109,7 +113,7 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
                 # Insert words into trie
                 for w in words:
                     self.root = self.ptrieObj.insert(
-                        self.root, w, 1, PtrieTester.add)
+                        self.root, w, 1, lambda v1, v2: v1 + v2)
             elif cmd == "load":
                 # Load a previously saved ptrie
                 oidname = args[0]

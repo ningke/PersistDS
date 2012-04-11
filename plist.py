@@ -82,7 +82,7 @@ if __name__ == '__main__':
     import testpds
 
     # Global PDS
-    global_pstor = testpds.getPStor()
+    global_pstor, oidfs = testpds.init_testpds()
     plistObj = Plist(global_pstor)
 
     ll = plistObj.plist('Angela', 'Austin', 'Ning', 'Qi')
@@ -95,3 +95,4 @@ if __name__ == '__main__':
     res = plistObj.map(lambda n: n, ll)
     print res 
     global_pstor.close()
+    oidfs.close()

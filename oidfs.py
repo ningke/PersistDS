@@ -59,6 +59,9 @@ class OidFS(object):
             # load rootoid from file
             self._rootoid = self._readRootoid()
 
+    def close(self):
+        self._oidPstor.close()
+
     def save(self, oid, oidname):
         ''' Save an OID as oidname in our database '''
         print "Saving %s into %s" % (oid, self._rootoid)
@@ -88,6 +91,4 @@ class OidFS(object):
             f = self._ptrieObj.getfields(node)
             if f['final']:
                 print "(%s : %s)" % (f['prefix'], f['value'])
-            else:
-                print "Internal (%s : %s)" % (f['prefix'], f['value'])
         self._ptrieObj.dfSearch(self._rootoid, display)
