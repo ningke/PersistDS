@@ -8,6 +8,13 @@ import ptrie
 from ptrie import Ptrie
 import cPickle
 
+##
+# TODO
+# Pstructstor's garbage collector does not look at oidfs for reference to
+# OIDs. This means that if you a PStructStor.keepOids() you must follow with
+# a OidFS.save() call. Otherwise any previously stored oids will be stale,
+# because those OIDs moved as a result of the garbage collection.
+#
 class OidFS(object):
     ''' Stores saved Oids within a file system.
     Oids are saved using a Trie data structure (Ptrie) '''
