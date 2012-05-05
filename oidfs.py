@@ -71,7 +71,7 @@ class OidFS(object):
 
     def save(self, oid, oidname):
         ''' Save an OID as oidname in our database '''
-        print "Saving %s into %s" % (oid, self._rootoid)
+        #print "Saving %s into %s" % (oid, self._rootoid)
         self._rootoid = self._ptrieObj.insert(self._rootoid, oidname, oid)
         self._writeRootoid(self._rootoid)
 

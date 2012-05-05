@@ -125,7 +125,7 @@ class PStructStor(object):
         oidvalStr = internalRec[:offset]
         forwardOidval = PStructStor.__unpackOidval(oidvalStr)
         rec = internalRec[offset:]
-        return (forwardOidval, rec,)
+        return (forwardOidval, rec)
     
     def getrec(self, oid):
         unused, rec = self.__getrec(self.active_pds, oid)
@@ -144,7 +144,7 @@ class PStructStor(object):
         self.moving = True
         newroots = []
         for r in roots:
-            print "moving %s" % r
+            #print "moving %s" % r
             newroots.append(self.__move(r))
         self.__swap_active()
         # Expunge the old PDS
