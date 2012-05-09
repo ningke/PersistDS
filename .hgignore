@@ -1,9 +1,0 @@
-syntax: glob
-*.pyc
-*~
-TAGS
-x
-y
-z
-
-syntax: regexp
