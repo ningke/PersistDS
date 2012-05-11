@@ -11,10 +11,11 @@ class StorPool(object):
         # If the file is newly created (file size is 0), leave one unused
         # recsize in the beginning because oid of 0 is not allowed.
         self.fobj.seek(0, 2)
-        filesz = fobj.tell()
-        if filesz == 0:
+        self.filesz = fobj.tell()
+        if self.filesz == 0:
             self.fobj.truncate(recsize)
             self.fobj.seek(0, 0)
+            self.filesz = recsize
 
     def close(self):
         self.fobj.close()
@@ -24,12 +25,10 @@ class StorPool(object):
         ''' seek the offset denoted by @seqnum. Throws an exception if that
         offset is not less than file size '''
         # Get file size
-        self.fobj.seek(0, 2)
-        filesz = self.fobj.tell()
         offset = seqnum * self.recsize
-        if offset >= filesz:
+        if offset >= self.filesz:
             raise ValueError("Bad seqnum of %d (recsize %d filesize %d)" % (
-                    seqnum, self.recsize, filesz))
+                    seqnum, self.recsize, self.filesz))
         self.fobj.seek(offset, 0)
 
     def create(self, rec):
@@ -42,8 +41,9 @@ class StorPool(object):
         self.fobj.write(rec)
         off2 = self.fobj.tell()
         if (off2 < off1 + self.recsize):
-            # Extend file to off1
+            # Extend file to (off1 + self.recsize)
             self.fobj.truncate(off1 + self.recsize)
+        self.filesz += self.recsize
         seqnum = (off1 / self.recsize)
         #print "Spool%d: created oid @ offset %x seqnum %d" % (self.recsize, off1, seqnum)
         return OID(seqnum, self.recsize)

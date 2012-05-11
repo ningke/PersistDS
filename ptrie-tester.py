@@ -8,7 +8,7 @@ from ptrie import Ptrie
 from oidfs import OidFS
 
 class PtrieTester(object):
-    def __init__(self, pdspath="/home/ning/run/testpds"):
+    def __init__(self, pdspath="/home/ning/local/var/run/testpds"):
         # Get a PStructStor and Oidfs
         self._reinit(pdspath)
 
