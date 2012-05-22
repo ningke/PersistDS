@@ -13,7 +13,6 @@ class PicklePacker(object):
         return cPickle.loads(strbuf)
 
 
-import pstructstor
 from oid import OID
 
 class PStruct(object):
@@ -51,22 +50,22 @@ class PStruct(object):
         self.sspec = tuple(sspec)
         self.sspec_fields = tuple([f[1] for f in sspec])
 
-    def __fieldIndex(self, fname):
+    def _fieldIndex(self, fname):
         for i, f in enumerate(self.sspec):
             if f[0] == fname:
                 return i
         raise KeyError("%s: Bad field name '%s'" % (self, fname))
 
-    def __list2Dict(self, fields=[]):
+    def _list2Dict(self, fields=[]):
         res = {}
         for f, spec in zip(fields, self.sspec):
             res[spec[0]] = f
         return res
 
-    def __dict2List(self, fieldsDict):
+    def _dict2List(self, fieldsDict):
        sf = list(self.sspec_fields)
        for k, v in fieldsDict.items():
-           sf[self.__fieldIndex(k)] = v
+           sf[self._fieldIndex(k)] = v
        return sf
 
     def unpackRec(self, rec):
@@ -84,7 +83,7 @@ class PStruct(object):
         properties setup, like, its name '''
         oid.name = self.sname
 
-    def __make(self, pstor, fields):
+    def _make(self, pstor, fields):
         rec = self.packFields(fields)
         oid = pstor.create(rec)
         self.initOid(oid)
@@ -92,8 +91,8 @@ class PStruct(object):
 
     def make(self, pstor, **kwargs):
         ''' pass fields in keyword args '''
-        fields = self.__dict2List(kwargs)
-        return self.__make(pstor, fields)
+        fields = self._dict2List(kwargs)
+        return self._make(pstor, fields)
     
     def checkType(self, o):
         if o.name != self.sname:
@@ -104,4 +103,4 @@ class PStruct(object):
         self.checkType(o)
         rec = pstor.getrec(o)
         fields = self.unpackRec(rec)
-        return self.__list2Dict(fields)
+        return self._list2Dict(fields)

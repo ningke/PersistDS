@@ -21,7 +21,7 @@ class StorPool(object):
         self.fobj.close()
         self.fobj = None
 
-    def __locate(self, seqnum):
+    def _locate(self, seqnum):
         ''' seek the offset denoted by @seqnum. Throws an exception if that
         offset is not less than file size '''
         # Get file size
@@ -50,7 +50,7 @@ class StorPool(object):
 
     def retrieve(self, seqnum):
         ''' Returns the record at @seqnum '''
-        self.__locate(seqnum)
+        self._locate(seqnum)
         #print "Spool%d: retrieving rec @ seqnum %d" % (self.recsize, seqnum)
         return self.fobj.read(self.recsize)
 
@@ -58,7 +58,7 @@ class StorPool(object):
         ''' Change a record partially at offset with new value partial '''
         if len(partial) > self.recsize:
             raise ValueError("newValue too large")
-        self.__locate(seqnum)
+        self._locate(seqnum)
         # seek to offset within the record and overwrite
         self.fobj.seek(offset, 1)
         mark = self.fobj.tell()
@@ -98,25 +98,25 @@ class FixszPDS(object):
         , in which case existing stor pools are initialized from the storpool
         files (size_32, size_128, etc)'''
         # directory containing all storpool files
-        self.__stordir= stordir
+        self._stordir= stordir
         # Global StorPool dict
-        self.__stor_pools = {}
-        for fname in os.listdir(self.__stordir):
+        self._stor_pools = {}
+        for fname in os.listdir(self._stordir):
             m = FixszPDS.namepat.match(fname)
             if m is None:
                 continue
             recsize = int(m.group(1))
-            fpath = os.path.join(self.__stordir, fname)
+            fpath = os.path.join(self._stordir, fname)
             fo = open(fpath, "rb+")
-            self.__stor_pools[fname] = StorPool(recsize, fo)
+            self._stor_pools[fname] = StorPool(recsize, fo)
 
     @property
     def stordir(self):
-        return self.__stordir
+        return self._stordir
 
     def close(self):
         ''' Call this method when done'''
-        for fname, spool in self.__stor_pools.items():
+        for fname, spool in self._stor_pools.items():
             print "Closing %s" % fname
             spool.fobj.close()
 
@@ -124,35 +124,35 @@ class FixszPDS(object):
         ''' Delete or otherwise Invalidate all records in the storage and
         reclaim storage space '''
         self.close()
-        self.__stor_pools = {}
-        for fname in os.listdir(self.__stordir):
-            os.remove(os.path.join(self.__stordir, fname))
+        self._stor_pools = {}
+        for fname in os.listdir(self._stordir):
+            os.remove(os.path.join(self._stordir, fname))
  
     def __str__(self):
-        return "Fixed-Size Storage at %s" % self.__stordir
+        return "Fixed-Size Storage at %s" % self._stordir
 
-    def __getStorPool(self, recsize):
+    def _getStorPool(self, recsize):
         ''' Returns a stor pool of @recsize, the stor pool is created if one
         doesn't exists '''
         recsize = roundToPowerOf2(recsize)
         if recsize == 0:
             raise ValueError("There is no zero sized storage pool.")
         fname = FixszPDS.nameOfStorfile(recsize)
-        if fname in self.__stor_pools:
-            return self.__stor_pools[fname]
+        if fname in self._stor_pools:
+            return self._stor_pools[fname]
         # Create a new stor pool and add it to the dict
-        fpath = os.path.join(self.__stordir, fname)
+        fpath = os.path.join(self._stordir, fname)
         assert(not os.path.exists(fpath))
         fo = open(fpath, "wb+")
         spool = StorPool(recsize, fo)
-        self.__stor_pools[fname] = spool
+        self._stor_pools[fname] = spool
         return spool
 
     def create(self, rec):
         sz = len(rec)
         if sz == 0:
             return OID.Nulloid
-        spool = self.__getStorPool(len(rec))
+        spool = self._getStorPool(len(rec))
         return spool.create(rec)
 
     def getrec(self, oid):
@@ -160,7 +160,7 @@ class FixszPDS(object):
             raise TypeError("oid Must be type OID")
         if oid is OID.Nulloid:
             return ""
-        spool = self.__getStorPool(oid.size)
+        spool = self._getStorPool(oid.size)
         return spool.retrieve(oid.oid)
 
     def updaterec(self, oid, offset, newValue):
@@ -168,7 +168,7 @@ class FixszPDS(object):
             raise TypeError("oid Must be type OID")
         if oid is OID.Nulloid:
             return ""
-        spool = self.__getStorPool(oid.size)
+        spool = self._getStorPool(oid.size)
         if len(newValue) == 0:
             return spool.retrieve(oid.oid)
         return spool.update(oid.oid, offset, newValue)

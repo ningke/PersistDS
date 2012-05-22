@@ -14,8 +14,8 @@ class PStructStor(object):
     mem2name = "mem2"
     activename = "active"
 
-    def __create_pds(self, stor_dir):
-        ''' stor_dir is an absolute path '''
+    def _create_pds(self, stor_dir):
+        ''' Creates PStor top directory. ''stor_dir'' is an absolute path '''
         if not os.path.isdir(stor_dir):
             os.mkdir(stor_dir)
         m1 = os.path.join(stor_dir, PStructStor.mem1name)
@@ -23,32 +23,32 @@ class PStructStor(object):
         for p in m1, m2:
             if not os.path.isdir(p):
                 os.mkdir(p)
-        self.__stordir = stor_dir
-        self.__pds1 = FixszPDS(m1)
-        self.__pds2 = FixszPDS(m2)
-        active = os.path.join(self.__stordir, PStructStor.activename)
+        self._stordir = stor_dir
+        self._pds1 = FixszPDS(m1)
+        self._pds2 = FixszPDS(m2)
+        active = os.path.join(self._stordir, PStructStor.activename)
         # Set active to point to mem1 initially
         if not os.path.exists(active):
             os.symlink(m1, active)
 
-    def __set_active(self, which):
-        m1 = os.path.join(self.__stordir, PStructStor.mem1name)
-        m2 = os.path.join(self.__stordir, PStructStor.mem2name)
-        active = os.path.join(self.__stordir, PStructStor.activename)
+    def _set_active(self, which):
+        m1 = os.path.join(self._stordir, PStructStor.mem1name)
+        m2 = os.path.join(self._stordir, PStructStor.mem2name)
+        active = os.path.join(self._stordir, PStructStor.activename)
         os.remove(active)
         if which == "1":
             os.symlink(m1, active)
-            self.active_pds = self.__pds1
-            self.standby_pds = self.__pds2
+            self.active_pds = self._pds1
+            self.standby_pds = self._pds2
         elif which == "2":
             os.symlink(m2, active)
-            self.active_pds = self.__pds2
-            self.standby_pds = self.__pds1
+            self.active_pds = self._pds2
+            self.standby_pds = self._pds1
         else:
             assert(False)
 
-    def __get_active(self):
-        active = os.path.join(self.__stordir, PStructStor.activename)
+    def _get_active(self):
+        active = os.path.join(self._stordir, PStructStor.activename)
         dst = os.readlink(active)
         if os.path.basename(dst) == PStructStor.mem1name:
             return "1"
@@ -57,48 +57,48 @@ class PStructStor(object):
         else:
             assert(False)
 
-    def __swap_active(self):
-        if self.active_pds == self.__pds1:
-            self.__set_active("2")
-        elif self.active_pds == self.__pds2:
-            self.__set_active("1")
+    def _swap_active(self):
+        if self.active_pds == self._pds1:
+            self._set_active("2")
+        elif self.active_pds == self._pds2:
+            self._set_active("1")
         else:
             assert(False)
 
     def __init__(self, stor_dir):
         if not os.path.isabs(stor_dir):
             raise TypeError("Must pass an absolute path for stor_dir")
-        self.__create_pds(stor_dir)
+        self._create_pds(stor_dir)
         # Set active pds according to the active link
-        self.__set_active(self.__get_active())
+        self._set_active(self._get_active())
         self.moving = False
 
     def __str__(self):
-        return "<PStructStor @ %s>" % (self.__stordir)
+        return "<PStructStor @ %s>" % (self._stordir)
 
     # the format for packing oid value using the module struct
     oidvalPackFormat = "<Q"
     
     @staticmethod
-    def __packOidval(oidval):
+    def _packOidval(oidval):
         return struct.pack(PStructStor.oidvalPackFormat, oidval)
 
     @staticmethod
-    def __unpackOidval(rec):
+    def _unpackOidval(rec):
         return struct.unpack(PStructStor.oidvalPackFormat, rec)[0]
 
     @staticmethod
-    def __sizeofPackedOidval():
+    def _sizeofPackedOidval():
         return struct.calcsize(PStructStor.oidvalPackFormat)
 
-    def __stampOid(self, oid):
-        oid.pstor = self.__stordir
+    def _stampOid(self, oid):
+        oid.pstor = self._stordir
 
-    def __checkStamp(self, oid):
-        return oid.pstor == self.__stordir
+    def _checkStamp(self, oid):
+        return oid.pstor == self._stordir
 
     # Interface to pds
-    def __create(self, pds, rec):
+    def _create(self, pds, rec):
         ''' Writes a record in storage and return the OID. A "forward pointer"
         field is added. It points to new "forwarded location during copying.
         The pds to write the record to must be specified '''
@@ -106,29 +106,29 @@ class PStructStor(object):
         # "Real" OIDs always have a non-zero oid value.
         # The concatenation below is potentially inefficient since the
         # rec string is copied
-        internalRec = PStructStor.__packOidval(0) + rec
+        internalRec = PStructStor._packOidval(0) + rec
         oid = pds.create(internalRec)
-        # Save this pstor inside the OID - Use self.__stordir as the unique
+        # Save this pstor inside the OID - Use self._stordir as the unique
         # identification for this pstor
-        self.__stampOid(oid)
+        self._stampOid(oid)
         return oid
 
     def create(self, rec):
         ''' Creates an OID object in the active pds '''
-        return self.__create(self.active_pds, rec)
+        return self._create(self.active_pds, rec)
 
-    def __getrec(self, pds, oid):
+    def _getrec(self, pds, oid):
         ''' Get the internal rec for the oid. returns a tuple of
         (oidval, rec) '''
         internalRec = pds.getrec(oid)
-        offset = PStructStor.__sizeofPackedOidval()
+        offset = PStructStor._sizeofPackedOidval()
         oidvalStr = internalRec[:offset]
-        forwardOidval = PStructStor.__unpackOidval(oidvalStr)
+        forwardOidval = PStructStor._unpackOidval(oidvalStr)
         rec = internalRec[offset:]
         return (forwardOidval, rec)
     
     def getrec(self, oid):
-        unused, rec = self.__getrec(self.active_pds, oid)
+        unused, rec = self._getrec(self.active_pds, oid)
         return rec
     
     def close(self):
@@ -145,14 +145,14 @@ class PStructStor(object):
         newroots = []
         for r in roots:
             #print "moving %s" % r
-            newroots.append(self.__move(r))
-        self.__swap_active()
+            newroots.append(self._move(r))
+        self._swap_active()
         # Expunge the old PDS
         self.standby_pds.expunge()
         self.moving = False
         return newroots
 
-    def __move(self, oid):
+    def _move(self, oid):
         ''' Moves an OID from active to standby '''
         # Don't move OID.Nulloid, it is never stored.
         if oid is OID.Nulloid:
@@ -160,7 +160,7 @@ class PStructStor(object):
         # First get the PStruct that was used to construct the OID
         ps = persistds.PStruct.mkpstruct(oid.name)
         # Read the record referenced by the oid
-        forwardOidval, rec = self.__getrec(self.active_pds, oid)
+        forwardOidval, rec = self._getrec(self.active_pds, oid)
         if forwardOidval != 0:
             # this oid is already copied (moved). Just create an OID object
             # that points to the new oidval
@@ -177,14 +177,14 @@ class PStructStor(object):
             if isinstance(f, OID) and f is not OID.Nulloid:
                 # We can only move an OID that is created (and stored) in
                 # our own pstor (self). A "foreign" OID is left alone.
-                if self.__checkStamp(f):
-                    newfields[i] = self.__move(f)
+                if self._checkStamp(f):
+                    newfields[i] = self._move(f)
         newrec = ps.packFields(newfields)
         # Create the new OID object in the standby PDS
-        newoid = self.__create(self.standby_pds, newrec)
+        newoid = self._create(self.standby_pds, newrec)
         ps.initOid(newoid)
         # Now update the "forward pointer" for the old OID so it won't be
         # moved again
-        forwardOidval = PStructStor.__packOidval(newoid.oid)
+        forwardOidval = PStructStor._packOidval(newoid.oid)
         self.active_pds.updaterec(oid, 0, forwardOidval)
         return newoid

@@ -8,10 +8,10 @@ class OID(object):
             if OID.Nulloid is None:
                 print "Creating Nulloid"
                 OID.Nulloid = super(OID, cls).__new__(cls)
-                OID.Nulloid.__oid = 0
-                OID.Nulloid.__size = 0
-                OID.Nulloid.__pstor = None
-                OID.Nulloid.__name = "Nulloid"
+                OID.Nulloid._oid = 0
+                OID.Nulloid._size = 0
+                OID.Nulloid._pstor = None
+                OID.Nulloid._name = "Nulloid"
             return OID.Nulloid
         else:
             return super(OID, cls).__new__(cls)
@@ -21,43 +21,43 @@ class OID(object):
             return
         if oid == 0:
             raise RuntimeError("0 is an invalid oid value!")
-        self.__oid = oid
-        self.__size = size
-        self.__pstor = None
-        self.__name = "anonymous"
+        self._oid = oid
+        self._size = size
+        self._pstor = None
+        self._name = "anonymous"
 
     def __getnewargs__(self):
-        return (self.__oid, self.__size)
+        return (self._oid, self._size)
 
     @property
     def oid(self):
-        return self.__oid
+        return self._oid
     @property
     def size(self):
-        return self.__size
+        return self._size
     @property
     def name(self):
-        return self.__name
+        return self._name
     @name.setter
     def name(self, oname):
         if self is OID.Nulloid:
             raise RuntimeError("Nulloid is read-only!")
-        self.__name = oname
+        self._name = oname
     @property
     def pstor(self):
-        return self.__pstor
+        return self._pstor
     @pstor.setter
     def pstor(self, pstor):
         if self is OID.Nulloid:
             raise RuntimeError("Nulloid is read-only!")
-        self.__pstor = pstor
+        self._pstor = pstor
 
     def __str__(self):
         if self is OID.Nulloid:
             return "<OID.Nulloid>"
         else:
-            return "<OID '%s' %x (size %d)>" % (self.__name,
-                    self.__oid, self.__size)
+            return "<OID '%s' %x (size %d)>" % (self._name,
+                    self._oid, self._size)
 
     def __nonzero__(self):
         return self is not OID.Nulloid
