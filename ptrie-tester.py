@@ -140,6 +140,7 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
             elif cmd == "gc":
                 # Do a garbage collection
                 print "Garbage Collecting pstor"
+                print type(self.root)
                 self.root, = self.pstor.keepOids([self.root])
                 print "Garbage Collecting oidfs"
                 self.oidfs.gc()

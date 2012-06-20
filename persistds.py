@@ -1,22 +1,9 @@
 #!/usr/bin/env python
 
-import cPickle
-
-class PicklePacker(object):
-    ''' Uses Python's Pickle protocol 2 and above to pack/unpack PStructs '''
-    def __init__(self):
-        # Needs at least protocol 2 for __getnewargs__
-        self.ver = cPickle.HIGHEST_PROTOCOL
-    def pack(self, o):
-        return cPickle.dumps(o, self.ver)
-    def unpack(self, strbuf):
-        return cPickle.loads(strbuf)
-
-
 from oid import OID
+import pdscache
 
 class PStruct(object):
-    default_packer = PicklePacker()
     psobj_table = {}
 
     @staticmethod
@@ -68,12 +55,6 @@ class PStruct(object):
            sf[self._fieldIndex(k)] = v
        return sf
 
-    def unpackRec(self, rec):
-        return PStruct.default_packer.unpack(rec)
-
-    def packFields(self, fields):
-        return PStruct.default_packer.pack(fields)
-
     def __str__(self):
         return "<PStruct %s>" % self.sname
 
@@ -84,8 +65,7 @@ class PStruct(object):
         oid.name = self.sname
 
     def _make(self, pstor, fields):
-        rec = self.packFields(fields)
-        oid = pstor.create(rec)
+        oid = pdscache.oidcreate(fields, pstor)
         self.initOid(oid)
         return oid
 
@@ -101,6 +81,5 @@ class PStruct(object):
 
     def getfields(self, pstor, o):
         self.checkType(o)
-        rec = pstor.getrec(o)
-        fields = self.unpackRec(rec)
+        fields = pdscache.oidfields(o)
         return self._list2Dict(fields)

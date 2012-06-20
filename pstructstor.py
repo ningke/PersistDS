@@ -1,14 +1,28 @@
-#!/usr/bin/env python
-
 import os
 import struct
 import persistds
 from fixszPDS import *
+import cPickle
+
+
+class PicklePacker(object):
+    ''' Uses Python's Pickle protocol 2 and above to pack/unpack PStructs '''
+    def __init__(self):
+        # Needs at least protocol 2 for __getnewargs__
+        self.ver = cPickle.HIGHEST_PROTOCOL
+    def pack(self, o):
+        return cPickle.dumps(o, self.ver)
+    def unpack(self, strbuf):
+        return cPickle.loads(strbuf)
+
 
 class PStructStor(object):
     ''' Manages a pair of OID stores and has the ability to copy/move OIDs
     between the two. This can be used by a garbage collector to "copy collect"
     dead OIDs. '''
+    
+    # OID packer
+    default_packer = PicklePacker()
 
     mem1name = "mem1"
     mem2name = "mem2"
@@ -98,38 +112,39 @@ class PStructStor(object):
         return oid.pstor == self._stordir
 
     # Interface to pds
-    def _create(self, pds, rec):
+    def _create(self, pds, oidfields):
         ''' Writes a record in storage and return the OID. A "forward pointer"
         field is added. It points to new "forwarded location during copying.
         The pds to write the record to must be specified '''
+        # Pack oid fields (a list)
+        oidrec = PStructStor.default_packer.pack(oidfields)
         # Newly created OIDs have a zero Oidval as its forward pointer.
         # "Real" OIDs always have a non-zero oid value.
-        # The concatenation below is potentially inefficient since the
-        # rec string is copied
-        internalRec = PStructStor._packOidval(0) + rec
+        internalRec = PStructStor._packOidval(0) + oidrec
         oid = pds.create(internalRec)
         # Save this pstor inside the OID - Use self._stordir as the unique
         # identification for this pstor
         self._stampOid(oid)
         return oid
 
-    def create(self, rec):
+    def create(self, oidfields):
         ''' Creates an OID object in the active pds '''
-        return self._create(self.active_pds, rec)
+        return self._create(self.active_pds, oidfields)
 
     def _getrec(self, pds, oid):
-        ''' Get the internal rec for the oid. returns a tuple of
-        (oidval, rec) '''
+        ''' Get the internal rec for the oid. Unpack and return a tuple of
+        (oidval, oidfields) '''
         internalRec = pds.getrec(oid)
         offset = PStructStor._sizeofPackedOidval()
         oidvalStr = internalRec[:offset]
         forwardOidval = PStructStor._unpackOidval(oidvalStr)
         rec = internalRec[offset:]
-        return (forwardOidval, rec)
+        oidfields = PStructStor.default_packer.unpack(rec)
+        return (forwardOidval, oidfields)
     
     def getrec(self, oid):
-        unused, rec = self._getrec(self.active_pds, oid)
-        return rec
+        unused, oidfields = self._getrec(self.active_pds, oid)
+        return oidfields
     
     def close(self):
         self.active_pds.close()
@@ -160,28 +175,25 @@ class PStructStor(object):
         # First get the PStruct that was used to construct the OID
         ps = persistds.PStruct.mkpstruct(oid.name)
         # Read the record referenced by the oid
-        forwardOidval, rec = self._getrec(self.active_pds, oid)
+        forwardOidval, fields = self._getrec(self.active_pds, oid)
         if forwardOidval != 0:
             # this oid is already copied (moved). Just create an OID object
             # that points to the new oidval
             newoid = OID(forwardOidval, oid.size)
             ps.initOid(newoid)
             return newoid
-        fields = ps.unpackRec(rec)
-        # Make a copy of fields, then go through each field in the list. If a
+        # Go through each field in the list. If a
         # field is a "regular" Python object or OID.Nulloid, then it
         # remains unchanged, if a field is an OID, then create a new OID at
         # the standby PDS.
-        newfields = fields[:]
         for i, f in enumerate(fields):
             if isinstance(f, OID) and f is not OID.Nulloid:
                 # We can only move an OID that is created (and stored) in
                 # our own pstor (self). A "foreign" OID is left alone.
                 if self._checkStamp(f):
-                    newfields[i] = self._move(f)
-        newrec = ps.packFields(newfields)
+                    fields[i] = self._move(f)
         # Create the new OID object in the standby PDS
-        newoid = self._create(self.standby_pds, newrec)
+        newoid = self._create(self.standby_pds, fields)
         ps.initOid(newoid)
         # Now update the "forward pointer" for the old OID so it won't be
         # moved again

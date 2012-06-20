@@ -157,7 +157,7 @@ class FixszPDS(object):
 
     def getrec(self, oid):
         if type(oid) is not OID:
-            raise TypeError("oid Must be type OID")
+            raise TypeError("oid Must be type OID (%s supplied)" % type(oid))
         if oid is OID.Nulloid:
             return ""
         spool = self._getStorPool(oid.size)
