@@ -26,29 +26,25 @@ class _CachedOid(object):
             assert(isinstance(o, oid.OID))
         self.pstor = pstor
         self.oid = o
-        print "Created coid %d" % self.seqnum
-
-    def add_destructor(self, destructor):
-        self._destructor = destructor
-
-    def __del__(self):
-        # delete cache entry
-        if hasattr(self, "_destructor"):
-            self._destructor(self)
+        #print "Created coid %d" % self.seqnum
+        if _cprof:
+            _cprof.coidcnt += 1
 
 
 # The "centry" functions are helpers to manipulate the cache entries.
 class _CacheEntry(object):
-    __slots__ = ["seqnum", "oidfields", "coidwref", "lnode"]
+    __slots__ = ["seqnum", "ofields", "coidwref", "lnode"]
 
-    def __init__(self, coid, oidfields):
+    def __init__(self, coid, ofields):
         assert(isinstance(coid, _CachedOid))
         self.seqnum = coid.seqnum
-        self.oidfields = oidfields
+        self.ofields = ofields
         # Careful: circular reference here - (Don't define __del__)
         self.coidwref = weakref.ref(coid)
         self.lnode = ListEntry(self)
-        print "Cached coid %d <%s>" % (coid.seqnum, oidfields)
+        #print "Cached coid %d <%s>" % (coid.seqnum, ofields)
+        if _cprof:
+            _cprof.centrycnt += 1
 
 
 class PDSCache(object):
@@ -64,42 +60,29 @@ class PDSCache(object):
         self._cache = {}
         # Least recently used cache entries
         self._lrulist = ListEntry(None)
-        # For debug/profile
-        self._num_dead_pdsobjs = 0
+        # Number of entries swept (garbage) during last sweeping
+        self._last_swept = None
+        self._full_since_last_swept = 0
 
-    def _get_destructor_func(self):
-        def delcoidcb(coid):
-            ''' Deletes a cache entry. This is passed to a _CachedOid object as
-            a destructor callback. '''
-            print "Garbage coid %d dead" % coid.seqnum,
-            try:
-                centry = self._cache[coid.seqnum]
-                self._delcentry(centry)
-                print " - remove cache entry",
-            except KeyError:
-                # the coid is not in cache (and must be in PStor). Do nothing.
-                pass
-            print ""
-        return delcoidcb
-
-    def _add(self, coid, oidfields):
+    def _add(self, coid, ofields):
         ''' Add a PDS instance to cache. Use the coid's seqnum as the
         dictionary key. '''
         # Check if cache is full, if so, flush some entries to PStor.
         if self._num_entries >= self._max_entries:
-            self._flushcache()
-        coid.add_destructor(self._get_destructor_func())
-        centry = _CacheEntry(coid, oidfields)
+            self._cleanup_cache()
+        centry = _CacheEntry(coid, ofields)
         self._addcentry(centry)
         return centry
 
     def _addcentry(self, centry):
+        assert(self._num_entries < self._max_entries)
         self._num_entries += 1
         self._cache[centry.seqnum] = centry
         # Most recent entries are added to the tail
         list_add_tail(centry.lnode, self._lrulist)
 
     def _delcentry(self, centry):
+        #print "delcentry: %d (%s)" % (centry.seqnum, centry.ofields[0])
         # Delete from list
         list_del(centry.lnode)
         # This breaks the reference cycle: (''data'' refers to centry)
@@ -108,52 +91,105 @@ class PDSCache(object):
         del self._cache[centry.seqnum]
         self._num_entries -= 1
 
-    def _num_to_flush(self):
-        ''' Try to determine an optimal number of entries to flush when
-        cache is full. '''
-        num = int(self._max_entries * 0.05)
-        if num < 1:
-            num = 1
-        if num > self._num_entries:
-            num = self._num_entries
-        return num
+    def _cleanup_cache(self):
+        ''' First collect (clean up) all the garbages. If no garbages are found
+        then flush out the least recently used cache entry. '''
+        # Sweeping in this manner is expensive, only do it if garbage amount
+        # exceeds a threshold.
+        gc_threshold = 0.4
+        r1 = float(self._full_since_last_swept) / self._num_entries
+        #print self._last_swept, r1
+        if self._last_swept is None or r1 > gc_threshold:
+            self._sweep_garbage()
+            self._full_since_last_swept = 0
+            if self._last_swept > 0:
+                return self._last_swept
+        # Now either there is no garbage or we skipped sweeping
+        self._full_since_last_swept += 1
+        return self._flushcache()
+
+    def _sweep_garbage(self):
+        ''' Go through all the cache entries and sweeps (delete) any cache
+        entries that are "garbage", as indicated by a "dead" coid weak ref.
+        Since a coid, with its associated cache entry (''centry''), can
+        refers to other coids/centries, those referenced coids will be
+        dereferced when this coid/centry is deleted. As a result, more
+        garbages might be produced. '''
+        total_swept = 0
+        #print "Sweeping:"
+        rn = 1
+        while True:
+            num_swept = 0
+            # We iteration throught the LRU list backwards, garbages are more
+            # likely to be situated at the most recent end. This heuristic
+            # only works for Python because of its reference counting GC.
+            for le in list_prev_iter(self._lrulist):
+                ce = le.data
+                coid = ce.coidwref()
+                if not coid:
+                    self._delcentry(ce)
+                    num_swept += 1
+            # Stop when there is no garbages left
+            #print "Round %d: %d swept" % (rn, num_swept)
+            rn += 1
+            if num_swept == 0:
+                break
+            total_swept += num_swept
+        self._last_swept = total_swept
+        #print "Sweep: %d rounds %d dead coids" % (rn, total_swept)
+        if _cprof:
+            _cprof.sweepcnt += 1
+            _cprof.deadcoid1cnt += total_swept
+        return total_swept
+
+    def dump_lrulist(self):
+        print "LRU List: [",
+        for e in list_next_iter(self._lrulist):
+            centry = e.data
+            s = centry.ofields[0]
+            if s == "":
+                s = '@'
+            if not centry.coidwref():
+                s = "~%s(%d)" % (s, centry.seqnum)
+            print s,
+        print "]"
 
     def _flushcache(self):
         ''' Free up some cache entries by "flusing" the least recently used
         entries to PStor '''
-        #num_to_flush = self._num_to_flush()
-        num_to_flush = 1
-        num_before_flush = self._num_entries
-        while True:
-            num_flushed = num_before_flush - self._num_entries
-            if num_flushed >= num_to_flush:
-                break
-            # least recently used entries are from head of list
-            if list_empty(self._lrulist):
-                assert(False)
-                break
-            node = self._lrulist._next
-            centry = node.data
-            self._flush(centry)
+        # least recently used entries are from head of list
+        if _cprof:
+            _cprof.fullcnt += 1
+        if list_empty(self._lrulist):
+            assert(False)
+        # LRU entry is next of list head
+        node = self._lrulist._next
+        centry = node.data
+        self._flush(centry)
+        return 1
 
     def _flush(self, centry):
         ''' Flushes a cache entry ''centry'' to PStor and delete the entry. '''
         coid = centry.coidwref()
-        if not coid:
-            # the coid is garbage. Just delete it.
-            print "Flush: Seeing garbage coid (seqnum %d)" % centry.seqnum
-            self._delcentry(centry)
-            return
-        # First write-through the coid, then delete cache entry
-        self._write_coid(coid)
+        if coid:
+            # coid is valid, write-through to PStor
+            self._write_coid(coid)
+        else:
+            # the coid is garbage.
+            if _cprof:
+                _cprof.deadcoid2cnt += 1
+            #print "Flush: Seeing garbage coid %d" % centry.seqnum
+            pass
+        # Delete cache entry
         self._delcentry(centry)
-        print "Flushed centry %d" % centry.seqnum
+        #print "Flushed centry %d" % centry.seqnum
 
     def _write_coid(self, coid):
         ''' Write the cached oid ''coid'' to PStor. Return the resulting OID.
         If a field in the coid refers to another coid, that coid will be
         written first. As a result, a tree of oids are written through by
-        this function. '''
+        this function. Side effect: ''oid'' field of the coid is added
+        as a result. - The ''coid'' now has a "backing" OID. '''
         if coid.oid is not None:
             # This coid has already been written (to PStor). It won't ever
             # change.
@@ -162,77 +198,173 @@ class PDSCache(object):
         # coid...
         assert(coid.seqnum in self._cache)
         centry = self._cache[coid.seqnum]
-        # Must make a copy of oidfields before doing this since we must not
-        # change the oidfields of the coid as a result of this function.
-        oidfields = centry.oidfields[:]
-        print "Writing coid %d: %s" % (coid.seqnum, oidfields)
-        for i, f in enumerate(oidfields):
+        # ''ofields'' MUST contain only native Python objects or a "real" OID
+        ofields = centry.ofields[:]
+        #print "Writing coid %d: %s" % (coid.seqnum, ofields)
+        for i, f in enumerate(ofields):
             if isinstance(f, _CachedOid):
-                # Note that we substitute a coid with a "real" OID
-                oidfields[i] = self._write_coid(f)
-        print "Creating oid: %s" % oidfields
-        o = coid.pstor.create(oidfields)
+                # Note that we substitute a coid with the "real" OID created
+                # through _write_coid. Also note that the original coid is
+                # modified (added a ''oid'').
+                ofields[i] = self._write_coid(f)
+            if isinstance(f, oid.OID):
+                assert(f is oid.OID.Nulloid)
+        o = coid.pstor.create(ofields)
         assert(hasattr(coid, "name"))
-        pds = persistds.PStruct.mkpstruct(coid.name)
-        pds.initOid(o)
+        ps = persistds.PStruct.mkpstruct(coid.name)
+        ps.initOid(o)
         coid.oid = o
+        if _cprof:
+            _cprof.wtcnt += 1
         return coid.oid
 
-    def create(self, oidfields, pstor):
+    def create(self, ofields, pstor):
         ''' Interface to PersistDS's OID create '''
         coid = _CachedOid(pstor)
-        self._add(coid, oidfields)
+        self._add(coid, ofields)
         return coid
 
-    def _get_oidrec(self, o):
-        ''' Interface to PersistDS's OID getrec when the passed oid is a
-        "real" OID ''o''. '''
+    def _cache_oid(self, o):
+        ''' Load an OID ''o'' from PStor and add it to our cache. Return the
+        resulting coid. '''
         # oid.pstor is a string
-        pstor = pstructstor.PStructStor(o.pstor)
-        oidfields = pstor.getrec(o)
+        pstor = pstructstor.PStructStor.mkpstor(o.pstor)
+        ofields = pstor.getrec(o)
         # Create a _CachedOid based on the real OID
         coid = _CachedOid(pstor, o)
+        # Have to give it a name
+        ps = persistds.PStruct.mkpstruct(o.name)
+        ps.initOid(coid)
         # Put it back into cache. Note is possible that multiple coids refer
-        # to the same underlying OID as a result of doing this. Sigh...
-        self._add(coid, oidfields)
-        return oidfields
+        # to the same underlying OID as a result of doing this. If we maintain
+        # a reverse hash (oid -> coid) then this can be avoided.
+        self._add(coid, ofields)
+        if _cprof:
+            _cprof.coldcnt += 1
+        return coid
 
     def _get_coidrec(self, coid):
         ''' Interface to PersistDS's OID getrec when the passed oid is a
         cached oid ''coid''. '''
+        def _cache_ofields(ofields):
+            ''' We need to cache any oid in the ''ofields'' because we don't
+            want caller to get hold of a "real" oid. If we let user to have
+            a "real" oid then that oid will ALWAYS have to be "cold loaded"
+            from PStor, even if we "cache" that oid internally. Why? because
+            the internally cached coid is not accessible to the user - we
+            cannot change the Python reference that point to the oid to
+            instead point to our coid. This little procedure transforms
+            any OID field within ofields to a COID. '''
+            for i, f in enumerate(ofields):
+                if isinstance(f, oid.OID) and f is not oid.OID.Nulloid:
+                    ofields[i] = self._cache_oid(f)
+            return ofields
         try:
             centry = self._cache[coid.seqnum]
             # Coid in cache: Move it to the tail of LRU list
             list_move_tail(centry.lnode, self._lrulist)
-            print "Getting centry %d" % centry.seqnum
-            return centry.oidfields
+            #print "Getting centry %d" % centry.seqnum
+            if _cprof:
+                _cprof.hitcnt += 1
+            return _cache_ofields(centry.ofields)
         except KeyError:
             # This Oid Cache has been moved to pstor, we have to get it back
             # first
-            print "Getting coid (%d) from PStor" % coid.seqnum
+            #print "Getting coid (%d) from PStor" % coid.seqnum
             assert(coid.oid is not None)
-            oidfields = coid.pstor.getrec(coid.oid)
-            # Put it back into cache. Note coid.seqnum is reused here.
-            self._add(coid, oidfields)
-            return oidfields
+            ofields = coid.pstor.getrec(coid.oid)
+            # Put the coid back into cache. Note coid.seqnum is reused here.
+            self._add(coid, ofields)
+            if _cprof:
+                _cprof.misscnt += 1
+            return _cache_ofields(ofields)
+
+
+import os
+import datetime
+class _CacheProf(object):
+    def reset_stats(self):
+        self.coidcnt = 0
+        self.centrycnt = 0
+        self.fullcnt = 0
+        self.wtcnt = 0
+        self.coldcnt = 0
+        self.hitcnt = 0
+        self.misscnt = 0
+        self.sweepcnt = 0
+        self.deadcoid1cnt = 0
+        self.deadcoid2cnt = 0
+ 
+    def __init__(self):
+        self.clock = 0
+        self.reset_stats()
+        fpath = "cacheprof.stats-%d-%s" % (_pdscache_size,
+                                           datetime.date.today().isoformat())
+        self.statsfo = open(fpath, "w")
+        fmtstr = "%13s" * 11 + "\n"
+        self.statsfo.write(fmtstr % \
+                               ("clock",
+                                "coidcnt",
+                                "centrycnt",
+                                "fullcnt",
+                                "wtcnt",
+                                "coldcnt",
+                                "hitcnt",
+                                "misscnt",
+                                "sweepcnt",
+                                "deadcoid1cnt",
+                                "deadcoid2cnt"))
+
+    def tick(self):
+        self.clock += 1
+        if self.clock % 1000 == 0:
+            self.calc()
+            self.reset_stats()
+            #print "%s: " % self.clock,
+            #_pdscache.dump_lrulist()
+
+    def calc(self):
+        fmtstr = "%13d" * 11 + "\n"
+        self.statsfo.write(fmtstr % \
+                               (self.clock,
+                                self.coidcnt,
+                                self.centrycnt,
+                                self.fullcnt,
+                                self.wtcnt,
+                                self.coldcnt,
+                                self.hitcnt,
+                                self.misscnt,
+                                self.sweepcnt,
+                                self.deadcoid1cnt,
+                                self.deadcoid2cnt))
 
 
 ##
 # All right, this is the global singleton PDS cache object that everyone
 # uses.
 #
-_pdscache = PDSCache(4)
+_pdscache_size = 2048
+_pdscache = PDSCache(_pdscache_size)
+
+# Cache stats
+#_cprof = _CacheProf()
+_cprof = None
+
+print "PDSCache Size %d" % _pdscache_size
 
 # Use these public functions to create and get OIDs
-def oidcreate(oidfields, pstor):
+def oidcreate(ofields, pstor):
     ''' Create a cached OID. '''
-    return _pdscache.create(oidfields, pstor)
+    coid = _pdscache.create(ofields, pstor)
+    if _cprof:
+        _cprof.tick()
+    return coid
 
-def oidfields(o):
-    ''' ''o'' can be a either a cached OID or a "real" OID. '''
-    if isinstance(o, _CachedOid):
-        return _pdscache._get_coidrec(o)
-    elif isinstance(o, oid.OID):
-        return _pdscache._get_oidrec(o)
-    else:
-        raise TypeError("Must be OID or _CachedOid type")
+def oidfields(coid):
+    if not isinstance(coid, _CachedOid):
+        raise TypeError("Wrong type: %s of %s. Must be _CachedOid" % \
+                            (coid, type(coid)))
+    ofields = _pdscache._get_coidrec(coid)
+    if _cprof:
+        _cprof.tick()
+    return ofields

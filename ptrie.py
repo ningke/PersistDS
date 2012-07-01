@@ -2,7 +2,6 @@
 
 import os
 from persistds import PStruct
-import pstructstor
 from oid import OID
 
 #

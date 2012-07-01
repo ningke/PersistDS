@@ -26,7 +26,7 @@ class OidFS(object):
         ''' Creates a PStructStor to store Oids '''
         if not os.path.isdir(pstorpath):
             os.mkdir(pstorpath)
-        return PStructStor(pstorpath)
+        return PStructStor.mkpstor(pstorpath)
 
     def _writeRootoid(self, rootoid):
         ''' writes the root OID to file '''

@@ -3,6 +3,7 @@ import struct
 import persistds
 from fixszPDS import *
 import cPickle
+import weakref
 
 
 class PicklePacker(object):
@@ -24,9 +25,37 @@ class PStructStor(object):
     # OID packer
     default_packer = PicklePacker()
 
+    # Active/Standby PDS
     mem1name = "mem1"
     mem2name = "mem2"
     activename = "active"
+
+    # Global PStor Table
+    _pstor_table = {}
+
+    @staticmethod
+    def mkpstor(stordir):
+        ''' Create a new PStor or return an existing PStor when ''stordir''
+        exists. Use this function instead of using the constructor directly
+        to avoid having multiple PStors pointing to the same underlying
+        PDS, as dictated by the ''stordir''. '''
+        if not os.path.isabs(stordir):
+            raise TypeError("Must pass an absolute path as stordir (%s)"
+                            % stordir)
+        if stordir in PStructStor._pstor_table:
+            pstorObj = PStructStor._pstor_table[stordir]()
+            if pstorObj:
+                return pstorObj
+            else:
+                # pstorObj has been garbage collected, need to recreate
+                # delete entry to prevent __init__ from asserting
+                del PStructStor._pstor_table[stordir]
+                pass
+        # Create new pstorObj
+        pstorObj = PStructStor.__new__(PStructStor, stordir)
+        pstorObj.__init__(stordir)
+        PStructStor._pstor_table[stordir] = weakref.ref(pstorObj)
+        return pstorObj
 
     def _create_pds(self, stor_dir):
         ''' Creates PStor top directory. ''stor_dir'' is an absolute path '''
@@ -80,8 +109,9 @@ class PStructStor(object):
             assert(False)
 
     def __init__(self, stor_dir):
-        if not os.path.isabs(stor_dir):
-            raise TypeError("Must pass an absolute path for stor_dir")
+        ''' Must use PStructStor.mkpstor() to create pstor. '''
+        # Kill program if someone tries to construct a pstor object directly.
+        assert(stor_dir not in PStructStor._pstor_table)
         self._create_pds(stor_dir)
         # Set active pds according to the active link
         self._set_active(self._get_active())

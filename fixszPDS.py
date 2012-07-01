@@ -27,6 +27,8 @@ class StorPool(object):
         # Get file size
         offset = seqnum * self.recsize
         if offset >= self.filesz:
+            self.fobj.seek(0, 2)
+            print "Real file size %d" % self.fobj.tell()
             raise ValueError("Bad seqnum of %d (recsize %d filesize %d)" % (
                     seqnum, self.recsize, self.filesz))
         self.fobj.seek(offset, 0)
@@ -117,7 +119,7 @@ class FixszPDS(object):
     def close(self):
         ''' Call this method when done'''
         for fname, spool in self._stor_pools.items():
-            print "Closing %s" % fname
+            #print "Closing %s" % fname
             spool.fobj.close()
 
     def expunge(self):
