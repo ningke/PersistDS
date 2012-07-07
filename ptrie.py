@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os
-from persistds import PStruct
+import persistds
 from oid import OID
 
 #
@@ -25,7 +25,7 @@ _default_tnode_fields = (
         ('lcp', Nulltrie),
         ('rsp', Nulltrie),);
 
-ptrieStruct = PStruct.mkpstruct('trienode', _default_tnode_fields)
+ptrieStruct = persistds.PStruct.mkpstruct('trienode', _default_tnode_fields)
 
 def replace_value(v1, v2):
     return v2
@@ -258,7 +258,7 @@ class Ptrie(object):
     def find(self, trie, key, finalOnly=True):
         ''' Find a Ptrie node with the "final" prefix of key. '''
         if not trie:
-            return None
+            return Nulltrie
         fields = self.getfields(trie)
         if len(fields['prefix']) != 0:
             raise RuntimeError("Search must start from root")

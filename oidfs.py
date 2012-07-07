@@ -1,12 +1,16 @@
-#!/usr/bin/env python
-
 import os
 import struct
-from pstructstor import PStructStor
-from oid import OID
-import ptrie
-from ptrie import Ptrie
 import cPickle
+import sys
+
+import pstructstor
+import oid
+import ptrie
+
+# Use PDSCache for internal Ptrie. Comment out the import line below if not
+# using pdscache.
+import pdscache
+
 
 ##
 # TODO
@@ -26,14 +30,16 @@ class OidFS(object):
         ''' Creates a PStructStor to store Oids '''
         if not os.path.isdir(pstorpath):
             os.mkdir(pstorpath)
-        return PStructStor.mkpstor(pstorpath)
+        return pstructstor.PStructStor.mkpstor(pstorpath)
 
     def _writeRootoid(self, rootoid):
         ''' writes the root OID to file '''
-        # pickle
+        # If PDSCache in use then write through the coid first
+        if "pdscache" in sys.modules:
+            rootoid = pdscache.write_coid(rootoid)
         rootoidPath = os.path.join(self._storpath, OidFS.rootoid_filename)
         fobj = open(rootoidPath, "w")
-        cPickle.dump(rootoid, fobj, -1)
+        cPickle.dump(rootoid, fobj, 2)
         fobj.close()
 
     def _readRootoid(self):
@@ -43,6 +49,9 @@ class OidFS(object):
         fobj = open(rootoidPath, "r")
         rootoid = cPickle.load(fobj)
         fobj.close()
+        # If PDSCache in use then convert to coid
+        if "pdscache" in sys.modules and rootoid is not oid.OID.Nulloid:
+            rootoid = pdscache.read_oid(rootoid)
         return rootoid
 
     def __init__(self, storpath):
@@ -55,7 +64,7 @@ class OidFS(object):
         pstorPath = os.path.join(storpath, OidFS.oidtable_pstor_dir)
         self._oidPstor = self._getPStor(pstorPath)
         # Use a Ptrie as our oid table
-        self._ptrieObj = Ptrie(self._oidPstor)
+        self._ptrieObj = ptrie.Ptrie(self._oidPstor)
         # Create or find the root of OID trie: The root OID is saved in a file
         rootoidPath = os.path.join(storpath, OidFS.rootoid_filename)
         if not os.path.exists(rootoidPath):
@@ -67,22 +76,27 @@ class OidFS(object):
             self._rootoid = self._readRootoid()
 
     def close(self):
+        self.gc()
         self._oidPstor.close()
 
-    def save(self, oid, oidname):
-        ''' Save an OID as oidname in our database '''
+    def store(self, oid, oidname):
+        ''' Store an OID as oidname in our database '''
         #print "Saving %s into %s" % (oid, self._rootoid)
+        # If using pdscache then oid is actually a coid.
+        if "pdscache" in sys.modules:
+            oid = pdscache.write_coid(oid)
         self._rootoid = self._ptrieObj.insert(self._rootoid, oidname, oid)
         self._writeRootoid(self._rootoid)
 
-    def find(self, oidname):
-        ''' Find an OID based on oidname (that was used to save the OID
-        originally '''
+    def load(self, oidname):
+        ''' Load the OID with ''oidname'' (that was used to save the OID
+        originally) from our database. '''
         oidnode = self._ptrieObj.find(self._rootoid, oidname)
         if not oidnode:
-            return ptrie.Nulltrie
+            return oidnode
         fields = self._ptrieObj.getfields(oidnode)
-        return fields['value']
+        coid = fields['value']
+        return coid
 
     def delete(self, oidname):
         self._rootoid = self._ptrieObj.delete(self._rootoid, oidname)
@@ -90,7 +104,13 @@ class OidFS(object):
 
     def gc(self):
         ''' Does a garbage collection. Saving rootoid only. '''
-        self._rootoid, = self._oidPstor.keepOids([self._rootoid])
+        o = self._rootoid
+        if "pdscache" in sys.modules:
+            o = pdscache.write_coid(self._rootoid)
+        o, = self._oidPstor.keepOids([o])
+        if "pdscache" in sys.modules:
+            o = pdscache.read_oid(o)
+        self._rootoid = o
         self._writeRootoid(self._rootoid)
 
     def lsoid(self):

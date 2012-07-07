@@ -1,7 +1,23 @@
-#!/usr/bin/env python
+import sys
 
 from oid import OID
+import pstructstor
+
+# Use PDSCache
 import pdscache
+# Whether PDSCache is use
+if "pdscache" in sys.modules:
+    oidcreate_func = pdscache.create_oid
+    oidfields_func = pdscache.oidfields
+else:
+    def create(ofields, pstor):
+        return pstor.create(ofields)
+    oidcreate_func = create
+    def ofields(o):
+        pstor = pstructstor.PStructStor.mkpstor(o.pstor)
+        return pstor.getrec(o)
+    oidfields_func = ofields
+
 
 class PStruct(object):
     psobj_table = {}
@@ -65,7 +81,7 @@ class PStruct(object):
         oid.name = self.sname
 
     def _make(self, pstor, fields):
-        oid = pdscache.oidcreate(fields, pstor)
+        oid = oidcreate_func(fields, pstor)
         self.initOid(oid)
         return oid
 
@@ -80,6 +96,7 @@ class PStruct(object):
                     % (self.sname, o.name))
 
     def getfields(self, pstor, o):
+        ''' Get fields of an oid. '''
         self.checkType(o)
-        fields = pdscache.oidfields(o)
+        fields = oidfields_func(o)
         return self._list2Dict(fields)

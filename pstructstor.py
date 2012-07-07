@@ -5,7 +5,6 @@ from fixszPDS import *
 import cPickle
 import weakref
 
-
 class PicklePacker(object):
     ''' Uses Python's Pickle protocol 2 and above to pack/unpack PStructs '''
     def __init__(self):

@@ -13,7 +13,7 @@ class PtrieTester(object):
         self._reinit(pdspath)
 
     def _reinit(self, pdspath):
-        self.pstor, self.oidfs = testpds.init_testpds(pdspath)
+        self.pstor, self.ofs = testpds.init_testpds(pdspath)
         self.ptrieObj = Ptrie(self.pstor)
         self.root = ptrie.Nulltrie # Start with Nulltrie as root
 
@@ -70,8 +70,8 @@ class PtrieTester(object):
                 inputtext = raw_input(">> ");
             except EOFError as e:
                 print "Goodbye!"
-                self.oidfs.gc()
-                self.oidfs.close()
+                self.ofs.gc()
+                self.ofs.close()
                 self.pstor.close()
                 return
             args = inputtext.split()
@@ -86,9 +86,8 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
             elif cmd == "quit":
                 ans = raw_input("Save? (y/n)")
                 if ans == "y":
-                    self.root, = self.pstor.keepOids([self.root])
-                    self.oidfs.save(self.root, "examplePtrie")
-                    self.oidfs.gc()
+                    self.ofs.store(self.root, "examplePtrie")
+                    self.ofs.close()
                     self.pstor.close()
                     print "Ptrie saved as \"examplePtrie\""
                 break
@@ -117,7 +116,7 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
             elif cmd == "load":
                 # Load a previously saved ptrie
                 oidname = args[0]
-                self.root = self.oidfs.find(oidname)
+                self.root = self.ofs.load(oidname)
                 if not self.root:
                     print "Not found: %s" % oidname
             elif cmd == "find":
@@ -143,22 +142,22 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
                 print type(self.root)
                 self.root, = self.pstor.keepOids([self.root])
                 print "Garbage Collecting oidfs"
-                self.oidfs.gc()
+                self.ofs.gc()
             elif cmd == "save":
                 # Save the root in oidfs
                 if len(args):
                     oidname = args[0]
                 else:
                     oidname = "examplePtrie"
-                self.oidfs.save(self.root, oidname)
+                self.ofs.store(self.root, oidname)
             elif cmd == "ls":
-                self.oidfs.lsoid()
+                self.ofs.lsoid()
             elif cmd == "remove-file":
                 if len(args):
                     oidname = args[0]
                 else:
                     oidname = "examplePtrie"
-                self.oidfs.delete(oidname)
+                self.ofs.delete(oidname)
             else:
                 print "Bad command: type 'quit' to quit"
 
