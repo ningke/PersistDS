@@ -122,7 +122,7 @@ class Ptrie(object):
         f2 = self.getfields(tn2)
         assert(f1['prefix'] == f2['prefix'])
         final = f1['final'] or f2['final']
-        # Simply add up the values - This should be customizable
+        # Merge old value with new value in mergevalue(oldval, newval)
         if f1['final'] and f2['final']:
             value = mergevalue(f1['value'], f2['value'])
         elif f1['final']:
@@ -221,34 +221,36 @@ class Ptrie(object):
             #print '<<<<<==%s==<<<<<' % res
             return res
 
-    def dfSearch(self, trie, func):
-        """ Traverses the trie in depth-first order """
+    def dfiter(self, trie):
+        """ An iterator that traverses the trie in depth-first order """
         if trie is Nulltrie:
             return
-        self._dfs([trie], func)
+        for node in self._dfs([trie]):
+            yield node
 
-    def _dfs(self, rest, func):
+    def _dfs(self, rest):
         ''' iterative version of dfs '''
         while len(rest):
             curr = rest.pop()
-            func(curr)
+            yield curr
             f = self.getfields(curr)
             if f['rsp']:
                 rest.append(f['rsp'])
             if f['lcp']:
                 rest.append(f['lcp'])
 
-    def bfsearch(self, trie, func):
-        ''' Traverses trie in breadth-first order '''
+    def bfiter(self, trie):
+        ''' Iterate trie in breadth-first order '''
         if trie is Nulltrie:
             return
-        return self._bfs([trie], func)
+        for node in self._bfs([trie]):
+            yield node
 
-    def _bfs(self, rest, func):
+    def _bfs(self, rest):
         ''' Iterative version of bf search '''
         while len(rest):
             curr = rest.pop(0)
-            func(curr)
+            yield curr
             fields = self.getfields(curr)
             if fields['lcp']:
                 rest.append(fields['lcp'])
@@ -304,8 +306,8 @@ class Ptrie(object):
             pmark = pfinder.path[0]
             predecessor, rel = PtriePathFinder.decode_path_mark(pmark)
             fields = self.getfields(predecessor)
-            print "<%s -> %s> (lcp %s rsp %s)" % \
-                (fields['prefix'], rel, fields['lcp'], fields['rsp'])
+#            print "<%s -> %s> (lcp %s rsp %s)" % \
+#                (fields['prefix'], rel, fields['lcp'], fields['rsp'])
             # Predecessor is either
             # 1) a final node or
             # 2) an internal node with an lcp and that lcp is not the delete

@@ -113,9 +113,10 @@ class OidFS(object):
         self._rootoid = o
         self._writeRootoid(self._rootoid)
 
-    def lsoid(self):
-        def display(node):
+    def oriter(self):
+        ''' Oid record 'orec' iterator - traverses OidFS In depth-first
+        (alphabetical) order. An Oid record is an (oidname, oid) tuple.'''
+        for node in self._ptrieObj.dfiter(self._rootoid):
             f = self._ptrieObj.getfields(node)
             if f['final']:
-                print "(%s : %s)" % (f['prefix'], f['value'])
-        self._ptrieObj.dfSearch(self._rootoid, display)
+                yield (f['prefix'], f['value'],)

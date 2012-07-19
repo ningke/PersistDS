@@ -10,9 +10,16 @@ from oidfs import OidFS
 class PtrieTester(object):
     def __init__(self, pdspath="/home/ning/local/var/run/testpds"):
         # Get a PStructStor and Oidfs
+        self.pstor = None
+        self.ofs = None
         self._reinit(pdspath)
 
     def _reinit(self, pdspath):
+        if self.ofs:
+            self.ofs.gc()
+            self.ofs.close()
+        if self.pstor:
+            self.pstor.close()
         self.pstor, self.ofs = testpds.init_testpds(pdspath)
         self.ptrieObj = Ptrie(self.pstor)
         self.root = ptrie.Nulltrie # Start with Nulltrie as root
@@ -35,7 +42,7 @@ class PtrieTester(object):
     def delete(self, word):
         newroot = self.ptrieObj.delete(self.root, word)
         if newroot is self.root:
-            print "%s is not found, nothing deleted!"
+            print "%s is not found, nothing deleted!" % word
         else:
             print "%s is deleted from ptrie" % word
             self.root = newroot
@@ -62,7 +69,19 @@ class PtrieTester(object):
         return prnode
 
     def bfwalk(self):
-        self.ptrieObj.bfsearch(self.root, self.makeBFSPrintFunc(-1))
+        level = -1
+        for node in self.ptrieObj.bfiter(self.root):
+            fields = self.ptrieObj.getfields(node)
+            prefix = fields['prefix']
+            if fields['final']:
+                pfxString = "(%s : %s)" % (fields['prefix'], fields['value'])
+            else:
+                assert(fields['value'] is None)
+                pfxString = prefix
+            if len(prefix) != level:
+                level += 1
+                print "level %d:" % level
+            print pfxString
 
     def testloop(self):
         while True:
@@ -132,15 +151,13 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
                         self.root, args[0], args[1], lambda v1, v2: v2)
             elif cmd == "dfwalk":
                 print "Depth-First Walk:"
-                self.ptrieObj.dfSearch(self.root, self.printNode)
+                for node in self.ptrieObj.dfiter(self.root):
+                    self.printNode(node)
             elif cmd == "bfwalk":
                 print "Breadth-First Walk:"
                 self.bfwalk()
             elif cmd == "gc":
                 # Do a garbage collection
-                print "Garbage Collecting pstor"
-                print type(self.root)
-                self.root, = self.pstor.keepOids([self.root])
                 print "Garbage Collecting oidfs"
                 self.ofs.gc()
             elif cmd == "save":
@@ -151,8 +168,9 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
                     oidname = "examplePtrie"
                 self.ofs.store(self.root, oidname)
             elif cmd == "ls":
-                self.ofs.lsoid()
-            elif cmd == "remove-file":
+                for orec in self.ofs.oriter():
+                    print orec
+            elif cmd == "rm":
                 if len(args):
                     oidname = args[0]
                 else:
