@@ -55,32 +55,32 @@ reference another record.
 Some pictures to illustrate the workings of PDS:
 
 Create an object:  Fields of an Object ==> OID
+<pre>
 --------------------------------------------------------------------------
                     Memory                  |        Disk
 --------------------------------------------------------------------------
 Running Program      |      PersistDS       |  Storage Protocol(e.g. File)
 --------------------------------------------------------------------------
-                     |                      |
-create object     ------> Pack object    ------>     Write to File
+create object     ===|==>   Pack object  ===|==>   Write to File
      ^               |                      |              |
-   return         <------ Create OID     <------   record location
+   return         <==|=== Create OID     <==|===   record location
                      |                      |
 --------------------------------------------------------------------------
-
+</pre>
 Retrieve an object:  OID => Fields of an Object
+<pre>
 --------------------------------------------------------------------------
                     Memory                  |        Disk
 --------------------------------------------------------------------------
 Running Program      |      PersistDS       |  Storage Protocol(e.g. File)
 --------------------------------------------------------------------------
-                     |                      |
-retrieve object   ------> record location ----->   Read File
+retrieve object   ===|==> record location ==|==>   Read File
   w/ OID             |                      |          |
                      |                      |          V
- object fields    <------ Unpack record  <------    get record
+ object fields    <==|=== Unpack record  <==|===    get record
                      |                      |
 --------------------------------------------------------------------------
-
+</pre>
 PersistDS only support immutable (aka functional) data
 structures. Because of this, once a persistent object is created, it
 will never change, and the actual object record on disk will never
