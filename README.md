@@ -63,7 +63,7 @@ Running Program      |      PersistDS       |  Storage Protocol(e.g. File)
 --------------------------------------------------------------------------
 create object     ===|==>   Pack object  ===|==>   Write to File
      ^               |                      |              |
-   return         <==|=== Create OID     <==|===   record location
+   return         &lt;==|=== Create OID     &lt;==|===   record location
                      |                      |
 --------------------------------------------------------------------------
 </pre>
@@ -77,7 +77,7 @@ Running Program      |      PersistDS       |  Storage Protocol(e.g. File)
 retrieve object   ===|==> record location ==|==>   Read File
   w/ OID             |                      |          |
                      |                      |          V
- object fields    <==|=== Unpack record  <==|===    get record
+ object fields    &lt;==|=== Unpack record  &lt;==|===    get record
                      |                      |
 --------------------------------------------------------------------------
 </pre>
