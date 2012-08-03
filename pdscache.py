@@ -1,3 +1,17 @@
+# Copyright 2012 Ning Ke
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import weakref
 from lnklist import *
 import oid
@@ -380,7 +394,7 @@ class _CacheProf(object):
 _cprof = None
 
 # Cache Size (Number of cache entries)
-_pdscache_size = 4096
+_pdscache_size = 8192
 # This is the global singleton PDS cache object that everyone uses.
 _pdscache = PDSCache(_pdscache_size)
 print "PDSCache %s: Size %d" % (_pdscache, _pdscache_size)
