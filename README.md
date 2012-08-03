@@ -59,28 +59,27 @@ Create an object:  Fields of an Object ==> OID
                     Memory                  |        Disk
 --------------------------------------------------------------------------
 Running Program      |      PersistDS       |  Storage Protocol(e.g. File)
----------------------|----------------------|-----------------------------
+--------------------------------------------------------------------------
                      |                      |
-create object     ---|--> Pack object    ---|-->     Write to File
+create object     ------> Pack object    ------>     Write to File
      ^               |                      |              |
-     |               |                      |              V
-     | return     <--|--- Create OID     <--|--- record location
+   return         <------ Create OID     <------   record location
                      |                      |
-
+--------------------------------------------------------------------------
 
 Retrieve an object:  OID => Fields of an Object
 --------------------------------------------------------------------------
                     Memory                  |        Disk
 --------------------------------------------------------------------------
 Running Program      |      PersistDS       |  Storage Protocol(e.g. File)
----------------------|----------------------|-----------------------------
+--------------------------------------------------------------------------
                      |                      |
-retrieve object   ---|--> record location --|-->   Read File
+retrieve object   ------> record location ----->   Read File
   w/ OID             |                      |          |
-                     |                      |          |
                      |                      |          V
- object fields    <--|--- Unpack record  <--|---    get record
+ object fields    <------ Unpack record  <------    get record
                      |                      |
+--------------------------------------------------------------------------
 
 PersistDS only support immutable (aka functional) data
 structures. Because of this, once a persistent object is created, it
