@@ -92,10 +92,10 @@ class Plist(object):
 
 if __name__ == '__main__':
     import os
-    import testpds
+    import ostore
 
     # Global PDS
-    global_pstor, oidfs = testpds.init_testpds()
+    global_pstor, oidfs = ostore.init_ostore()
     plistObj = Plist(global_pstor)
 
     ll = plistObj.plist('Angela', 'Austin', 'Ning', 'Qi')

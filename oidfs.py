@@ -47,10 +47,11 @@ class OidFS(object):
             os.mkdir(pstorpath)
         return pstructstor.PStructStor.mkpstor(pstorpath)
 
-    def _writeRootoid(self, rootoid):
+    def _writeRootoid(self):
         ''' writes the root OID to file '''
+        rootoid = self._rootoid
         # If PDSCache in use then write through the coid first
-        if "pdscache" in sys.modules:
+        if isinstance(rootoid, pdscache._CachedOid):
             rootoid = pdscache.write_coid(rootoid)
         rootoidPath = os.path.join(self._storpath, OidFS.rootoid_filename)
         fobj = open(rootoidPath, "w")
@@ -65,7 +66,7 @@ class OidFS(object):
         rootoid = cPickle.load(fobj)
         fobj.close()
         # If PDSCache in use then convert to coid
-        if "pdscache" in sys.modules and rootoid is not oid.OID.Nulloid:
+        if rootoid is not oid.OID.Nulloid:
             rootoid = pdscache.read_oid(rootoid)
         return rootoid
 
@@ -85,7 +86,7 @@ class OidFS(object):
         if not os.path.exists(rootoidPath):
             # Create OID root, use OID.Nulloid as the root of an empty OID table
             self._rootoid = ptrie.Nulltrie
-            self._writeRootoid(self._rootoid)
+            self._writeRootoid()
         else:
             # load rootoid from file
             self._rootoid = self._readRootoid()
@@ -94,14 +95,18 @@ class OidFS(object):
         self.gc()
         self._oidPstor.close()
 
-    def store(self, oid, oidname):
-        ''' Store an OID as oidname in our database '''
-        #print "Saving %s into %s" % (oid, self._rootoid)
-        # If using pdscache then oid is actually a coid.
-        if "pdscache" in sys.modules:
-            oid = pdscache.write_coid(oid)
-        self._rootoid = self._ptrieObj.insert(self._rootoid, oidname, oid)
-        self._writeRootoid(self._rootoid)
+    def _store(self, o, oname):
+        ''' Store an OID as oidname in database but don't write rootoid yet. '''
+        #print "Saving %s into %s" % (o, self._rootoid)
+        # If using pdscache then o is actually a coid.
+        if isinstance(o, pdscache._CachedOid):
+            o = pdscache.write_coid(o)
+        self._rootoid = self._ptrieObj.insert(self._rootoid, oname, o)
+
+    def store(self, o, oname):
+        ''' Store an OID as oname in our database '''
+        self._store(o, oname)
+        self._writeRootoid()
 
     def load(self, oidname):
         ''' Load the OID with ''oidname'' (that was used to save the OID
@@ -115,18 +120,58 @@ class OidFS(object):
 
     def delete(self, oidname):
         self._rootoid = self._ptrieObj.delete(self._rootoid, oidname)
-        self._writeRootoid(self._rootoid)
+        self._writeRootoid()
+
+    def _collect_pstor(self):
+        ''' Run GC on OID's pstructstor. OIDs stored in OidFS will be moved
+        as a result. Note this function assumes that stored oids can belong
+        to different PStors, which is currently allowed. In the future,
+        PStor should probably take possession of OidFS so that there is only
+        one PStor in a single OidFS. '''
+        # Since PStor's GC function moves OIDs, we have to make a new OID
+        # ptrie with the same oidname and new OID references.
+        pstordict = {}
+        for orec in self.oriter():
+            oname, o = orec
+            if isinstance(o, pdscache._CachedOid):
+                # o is type 'coid' and o.pstor is a PStructStor object
+                pstor = o.pstor
+            else:
+                # o is type 'OID' and o.pstor is a string
+                pstor = pstructstor.PStructStor.mkpstor(o.pstor)
+            if pstor not in pstordict:
+                # pstor dictionary's value is a (onames, ovalues) pair
+                pstordict[pstor] = [[], []]
+            onames, ovalues = pstordict[pstor]
+            onames.append(oname)
+            if isinstance(o, pdscache._CachedOid):
+                # Must convert back to real Oid
+                o = pdscache.write_coid(o)
+            ovalues.append(o)
+        if not len(pstordict):
+            return
+        # Now send to pstructstor for GC and essentially re-create our
+        # internal oid ptrie with new oid values
+        for pstor in pstordict:
+            ovalues = pstordict[pstor][1]
+            pstordict[pstor][1] = ovalues = pstor.keepOids(ovalues)
+            for oname, o in zip(onames, ovalues):
+                self._store(o, oname)
+        self._writeRootoid()
 
     def gc(self):
-        ''' Does a garbage collection. Saving rootoid only. '''
+        ''' Garbage collects OidFS's internal Ptrie PStor. Saving only
+        self._rootoid. '''
+        # Run GC on OID's pstor first.
+        self._collect_pstor()
+        # Save oidfs's _rootoid
         o = self._rootoid
-        if "pdscache" in sys.modules:
+        if isinstance(self._rootoid, pdscache._CachedOid):
             o = pdscache.write_coid(self._rootoid)
         o, = self._oidPstor.keepOids([o])
-        if "pdscache" in sys.modules:
-            o = pdscache.read_oid(o)
+        o = pdscache.read_oid(o)
         self._rootoid = o
-        self._writeRootoid(self._rootoid)
+        self._writeRootoid()
 
     def oriter(self):
         ''' Oid record 'orec' iterator - traverses OidFS In depth-first

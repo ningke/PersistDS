@@ -15,13 +15,14 @@
 
 import sys
 import os
-import testpds
+import ostore
 import ptrie
+import pdscache
 from ptrie import Ptrie
 from oidfs import OidFS
 
 class PtrieTester(object):
-    def __init__(self, pdspath="/home/ning/local/var/run/testpds"):
+    def __init__(self, pdspath="/home/ning/local/run/test_ostore"):
         # Get a PStructStor and Oidfs
         self.pstor = None
         self.ofs = None
@@ -33,7 +34,7 @@ class PtrieTester(object):
             self.ofs.close()
         if self.pstor:
             self.pstor.close()
-        self.pstor, self.ofs = testpds.init_testpds(pdspath)
+        self.pstor, self.ofs = ostore.init_ostore(pdspath)
         self.ptrieObj = Ptrie(self.pstor)
         self.root = ptrie.Nulltrie # Start with Nulltrie as root
 
@@ -114,7 +115,7 @@ class PtrieTester(object):
 
             if cmd == "help":
                 print """Type a command. Commands are:
-help quit read load find delete insert dfwalk bfwalk gc save ls"""
+help quit read load find delete insert dfwalk bfwalk save ls gc gc-pstor"""
             elif cmd == "quit":
                 ans = raw_input("Save? (y/n)")
                 if ans == "y":
@@ -136,15 +137,18 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
                     print "Must be an existing absolute path!"
             elif cmd == "read":
                 # Insert words from a list
-                fobj = open(args[0])
-                words = fobj.read()
-                words = eval(words) # words must be in the format of a python list
-                fobj.close()
-                print words
-                # Insert words into trie
-                for w in words:
-                    self.root = self.ptrieObj.insert(
-                        self.root, w, 1, lambda v1, v2: v1 + v2)
+                try:
+                    fobj = open(args[0])
+                    words = fobj.read()
+                    words = eval(words) # words must be in the format of a python list
+                    fobj.close()
+                    print words
+                    # Insert words into trie
+                    for w in words:
+                        self.root = self.ptrieObj.insert(
+                            self.root, w, 1, lambda v1, v2: v1 + v2)
+                except Exception as e:
+                    print e
             elif cmd == "load":
                 # Load a previously saved ptrie
                 oidname = args[0]
@@ -170,9 +174,13 @@ help quit read load find delete insert dfwalk bfwalk gc save ls"""
                 print "Breadth-First Walk:"
                 self.bfwalk()
             elif cmd == "gc":
-                # Do a garbage collection
-                print "Garbage Collecting oidfs"
-                self.ofs.gc()
+                ans = raw_input(
+                    """GC will destroy any unsaved OIDs. After GC is complete,
+you must re-load your saved OID because current OID references may be stale.
+Continue? (y/n)""")
+                if ans == "y":
+                    print "Garbage Collecting oidfs."
+                    self.ofs.gc()
             elif cmd == "save":
                 # Save the root in oidfs
                 if len(args):
