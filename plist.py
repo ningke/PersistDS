@@ -55,18 +55,17 @@ class Plist(object):
             return emptylist
         return nodePS.make(self.pstor, value=args[0], nxt=self.plist(*args[1:]))
 
-    def lliter(self, ll):
+    def liter(self, ll):
         ''' returns a generator of the linked list '''
-        subll = ll
-        while subll is not emptylist:
-            yield self.car(subll)
-            subll = self.cdr(subll)
+        while ll is not emptylist:
+            yield self.car(ll)
+            ll = self.cdr(ll)
 
     def map(self, func, ll):
         ''' This map returns a "regular" list of Oids '''
         if not ll:
             return []
-        return [func(i) for i in self.lliter(ll)]
+        return [func(i) for i in self.liter(ll)]
 
     def insertAfter(self, ll, compare, newvalue):
         ''' Inserts a new value @newvalue into a plist @ll after the
@@ -101,8 +100,8 @@ if __name__ == '__main__':
     ll = plistObj.plist('Angela', 'Austin', 'Ning', 'Qi')
     print ll
     ll = plistObj.insertAfter(ll, 'Austin', 'Baba')
-    res = plistObj.map(lambda n: n, ll)
+    res = plistObj.map(lambda n: "*" + n + "*", ll)
     print res
 
-    global_pstor.close()
     oidfs.close()
+    global_pstor.close()

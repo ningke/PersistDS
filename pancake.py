@@ -61,6 +61,7 @@ class Pancake(object):
         self.ptrieObj = ptrie.Ptrie(pstor)
         self.numpcakes = numpcakes
         self.pcakeTrieList = plist.emptylist
+        self.pcakeTrieAll = ptrie.Nulltrie
 
     @staticmethod
     def sortedSeq(n):
@@ -81,15 +82,17 @@ class Pancake(object):
         ''' Create a new ptrie ''pcakeTrie'' from the previous level. The first
         level is the sorted sequence. ''curlist'' is the current list of pancake
         ptries. '''
+        pcakeTrie = ptrie.Nulltrie
         if (curlist is plist.emptylist):
             # Level 0 is simply the sorted sequence
             s = Pancake.sortedSeq(self.numpcakes)
             print "    <%s>" % s
             print "  1 Total"
-            return self.ptrieObj.insert(ptrie.Nulltrie, s, None)
+            self.pcakeTrieAll = self.ptrieObj.insert(self.pcakeTrieAll, s, None)
+            pcakeTrie = self.ptrieObj.insert(ptrie.Nulltrie, s, None)
+            return pcakeTrie
         # Create current level from the previous level
         cnt = 0
-        pcakeTrie = ptrie.Nulltrie
         prevTrie = self.plistObj.car(curlist)
         for node in self.ptrieObj.bfiter(prevTrie):
             f = self.ptrieObj.getfields(node)
@@ -99,25 +102,17 @@ class Pancake(object):
                 # Now do prefix reversals on ''prevseq'' and insert the
                 # resulting sequence into ''pcakeTrie'' if it is not a duplicate.
                 for seq in Pancake.prefix_rev_iter(prevseq):
-                    # Insert seq if not a duplicate
-                    if not self._isDup(seq, curlist):
-                        #pt = self.ptrieObj.insert(pcakeTrie, seq, prevseq, None)
-                        pt = self.ptrieObj.insert(pcakeTrie, seq, None, None)
-                        if pt is not pcakeTrie:
-                            #print "    <%s>" % seq
-                            pcakeTrie = pt
-                            cnt += 1
+                    # Insert seq into pcakeTrieAll, detect duplicate
+                    pt = self.ptrieObj.insert(self.pcakeTrieAll, seq, prevseq, None)
+                    if pt is not self.pcakeTrieAll:
+                        #print "    <%s>" % seq
+                        self.pcakeTrieAll = pt
+                        # Got new trie from ''insert'', not a dup. Add seq to
+                        # pcakeTrie also
+                        pcakeTrie = self.ptrieObj.insert(pcakeTrie, seq, prevseq, None)
+                        cnt += 1
         print "  %d Total" % cnt
         return pcakeTrie
-
-    def _isDup(self, seq, ptlist):
-        ''' Check if ''seq'' exists in ptrie list ''ptlist''. '''
-        for pt in self.plistObj.liter(ptlist):
-            #print "Checking Ptrie %s for seq '%s'" % (pt, seq)
-            if self.ptrieObj.find(pt, seq):
-                # Found
-                return True
-        return False
 
     @staticmethod
     def prefix_rev_iter(tmpl):

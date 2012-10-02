@@ -394,7 +394,7 @@ class _CacheProf(object):
 _cprof = None
 
 # Cache Size (Number of cache entries)
-_pdscache_size = 8192
+_pdscache_size = 32 * 1000
 # This is the global singleton PDS cache object that everyone uses.
 _pdscache = PDSCache(_pdscache_size)
 print "PDSCache %s: Size %d" % (_pdscache, _pdscache_size)

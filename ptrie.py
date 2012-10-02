@@ -80,6 +80,8 @@ class Ptrie(object):
                 final=nodefields['final'],
                 lcp=nodefields['lcp'],
                 rsp=nodefields['rsp'])
+            if mergevalue is None:
+                return trie
             newnode = self._merge_tnodes(pfinder.target, newnode, mergevalue)
         else:
             # Need to create a new trie node
@@ -423,8 +425,7 @@ class PtriePathFinder(object):
             targetkey = key[pos-1:pos]
             fields = self._ptrieObj.getfields(trie)
             triekey = fields['prefix'][pos-1:pos]
-            #print "%s <=> %s" % (PtriePathFinder.markstrpos(key, pos),
-                                 #fields['prefix'])
+            #print "%s <=> %s" % (PtriePathFinder.markstrpos(key, pos), fields['prefix'])
             if targetkey == triekey:
                 # This position is a match, now move on the next position,
                 #starting from the first child of this trie node.
