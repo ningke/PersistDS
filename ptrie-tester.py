@@ -97,6 +97,42 @@ class PtrieTester(object):
                 print "level %d:" % level
             print pfxString
 
+    def inspect(self):
+        ''' Prints a saved trie and at the same time prints fixszPDS's record for
+        comparison. The trie must be saved before doing this to ensure that all cache
+        entries are flushded to storage. '''
+        level = -1
+        odict = {}
+        for node in self.ptrieObj.bfiter(self.root):
+            fields =self.ptrieObj.getfields(node)
+            prefix = fields['prefix']
+            if fields['final']:
+                pfxString = "(%s : %s)" % (fields['prefix'], fields['value'])
+            else:
+                assert(fields['value'] is None)
+                pfxString = prefix
+            # Add debug info and store them into a dict of lists
+            sz = node.oid._size
+            oidvalue = node.oid._oid
+            pfxString += " (size:%x oidvalue:%d)" % (sz, oidvalue)
+            if sz not in odict:
+                odict[sz] = []
+            olist = odict[sz]
+            olist.append((pfxString, sz, oidvalue))
+            # Print bfwalk tree
+            if len(prefix) != level:
+                level += 1
+                print "level %d:" % level
+            print pfxString
+        # Now sort onodes according to oidvalue (this is an offset within the file)
+        for sz in odict:
+            olist = odict[sz]
+            olist.sort(key=lambda n: n[2])
+        for sz in odict:
+            print "size %d:" % sz
+            for node in odict[sz]:
+                print "%04d: '%s'" % (node[2], node[0])
+
     def testloop(self):
         while True:
             try:
@@ -115,7 +151,7 @@ class PtrieTester(object):
 
             if cmd == "help":
                 print """Type a command. Commands are:
-help quit read load find delete insert dfwalk bfwalk save ls gc gc-pstor"""
+help quit read load find delete insert dfwalk bfwalk save ls gc inspect"""
             elif cmd == "quit":
                 ans = raw_input("Save? (y/n)")
                 if ans == "y":
@@ -197,6 +233,8 @@ Continue? (y/n)""")
                 else:
                     oidname = "examplePtrie"
                 self.ofs.delete(oidname)
+            elif cmd == "inspect":
+                self.inspect()
             else:
                 print "Bad command: type 'quit' to quit"
 
