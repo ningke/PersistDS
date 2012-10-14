@@ -64,7 +64,6 @@ class PStructStor(object):
                 # pstorObj has been garbage collected, need to recreate
                 # delete entry to prevent __init__ from asserting
                 del PStructStor._pstor_table[stordir]
-                pass
         # Create new pstorObj
         pstorObj = PStructStor.__new__(PStructStor, stordir)
         pstorObj.__init__(stordir)
@@ -130,6 +129,32 @@ class PStructStor(object):
         # Set active pds according to the active link
         self._set_active(self._get_active())
         self.moving = False
+        self.reset_stats()
+
+    def reset_stats(self):
+        ''' Reset stats. This should be done before a GC. Two sets of stats are kept.
+        One set is based on all the Oids ever created. The other set is based on
+        only those Oids that are accessed (through getrec()), and therefore it
+        reflects the actual "seek" cost more accurately. '''
+        # Total set
+        self.tot_oids = 0
+        self.avg_chld_distance = 0.0
+        self.tot_jumps = 0
+        # accessed set.
+        self.accessed_tot_oids = 0
+        self.accessed_avg_chld_distance = 0.0
+        self.accessed_tot_jumps = 0
+        # GC stats
+        self.garbage_cnt = 0
+
+    def print_stats(self):
+        print "Creation Stats for Oids:"
+        print "Total Oids %d, Average Child Distance %f, Total Jumps %d." % \
+            (self.tot_oids, self.avg_chld_distance, self.tot_jumps)
+        print "Access Stats for Oids:"
+        print "Total Oids %d, Average Child Distance %f, Total Jumps %d." % \
+            (self.accessed_tot_oids, self.accessed_avg_chld_distance, self.accessed_tot_jumps)
+        print "Garbage Count %d" % self.garbage_cnt
 
     def __str__(self):
         return "<PStructStor @ %s>" % (self._stordir)
@@ -156,38 +181,76 @@ class PStructStor(object):
         return oid.pstor == self._stordir
 
     # Interface to pds
-    def _create(self, pds, oidfields):
+    def _create(self, pds, ofields):
         ''' Writes a record in storage and return the OID. A "forward pointer"
         field is added. It points to new "forwarded location during copying.
         The pds to write the record to must be specified '''
         # Pack oid fields (a list)
-        oidrec = PStructStor.default_packer.pack(oidfields)
+        oidrec = PStructStor.default_packer.pack(ofields)
         # Newly created OIDs have a zero Oidval as its forward pointer.
         # "Real" OIDs always have a non-zero oid value.
         internalRec = PStructStor._packOidval(0) + oidrec
-        oid = pds.create(internalRec)
+        o = pds.create(internalRec)
         # Save this pstor inside the OID - Use self._stordir as the unique
         # identification for this pstor
-        self._stampOid(oid)
-        return oid
+        self._stampOid(o)
+        # Collect creation stats
+        statstup = (self.tot_oids, self.tot_jumps, self.avg_chld_distance)
+        (self.tot_oids, self.tot_jumps, self.avg_chld_distance) = \
+            self.cumulate_stats(statstup, o, ofields)
+        # Now return the newly created Oid ''o''
+        return o
+
+    def cumulate_stats(self, curstats, o, ofields):
+        ''' collects stats pertaining to Oid creation. '''
+        (tot_oids, tot_jumps, avg_chld_dis) = curstats
+        avgdis, jumps = self.calc_children_distance(o, ofields)
+        avg_chld_dis = (avg_chld_dis * tot_oids + avgdis) / (tot_oids + 1)
+        tot_oids += 1
+        tot_jumps += jumps
+        return (tot_oids, tot_jumps, avg_chld_dis)
+
+    def calc_children_distance(self, o, ofields):
+        ''' find average distance (PDS offset) to its direct children and number of
+        "jumps". '''
+        (avgdis, jumps) = (0.0, 0)
+        cnt = 0
+        totaldis = 0
+        for f in ofields:
+            if isinstance(f, OID) and f is not OID.Nulloid:
+                # If this is a "foreign" oid, or if its size differ then it's a
+                # jump from one PDS to another, we don't know how far the distance is.
+                if self._checkStamp(f) and f.size == o.size:
+                    totaldis += abs(o.oid - f.oid)
+                    cnt += 1
+                else:
+                    jumps += 1
+        if cnt:
+            avgdis = float(totaldis / cnt);
+        return (avgdis, jumps)
 
     def create(self, oidfields):
         ''' Creates an OID object in the active pds '''
         return self._create(self.active_pds, oidfields)
 
-    def _getrec(self, pds, oid):
+    def _getrec(self, pds, o):
         ''' Get the internal rec for the oid. Unpack and return a tuple of
         (oidval, oidfields) '''
-        internalRec = pds.getrec(oid)
+        internalRec = pds.getrec(o)
         offset = PStructStor._sizeofPackedOidval()
         oidvalStr = internalRec[:offset]
         forwardOidval = PStructStor._unpackOidval(oidvalStr)
         rec = internalRec[offset:]
-        oidfields = PStructStor.default_packer.unpack(rec)
-        return (forwardOidval, oidfields)
+        ofields = PStructStor.default_packer.unpack(rec)
+        # Collect access stats
+        statstup = (self.accessed_tot_oids, self.accessed_tot_jumps,
+                    self.accessed_avg_chld_distance)
+        (self.accessed_tot_oids, self.accessed_tot_jumps,
+         self.accessed_avg_chld_distance) = self.cumulate_stats(statstup, o, ofields)
+        return (forwardOidval, ofields)
     
-    def getrec(self, oid):
-        unused, oidfields = self._getrec(self.active_pds, oid)
+    def getrec(self, o):
+        unused, oidfields = self._getrec(self.active_pds, o)
         return oidfields
     
     def close(self):
@@ -200,6 +263,8 @@ class PStructStor(object):
         order '''
         if self.moving:
             raise RuntimeError("Cannot run moving operation in parallel")
+        oldoidcnt = self.tot_oids
+        self.reset_stats()
         self.moving = True
         newroots = []
         for r in roots:
@@ -208,6 +273,10 @@ class PStructStor(object):
         self._swap_active()
         # Expunge the old PDS
         self.standby_pds.expunge()
+        self.garbage_cnt = oldoidcnt - self.tot_oids
+        self.accessed_tot_oids = 0
+        self.accessed_avg_chld_distance = 0.0
+        self.accessed_tot_jumps = 0
         self.moving = False
         return newroots
 

@@ -85,16 +85,13 @@ class StorPool(object):
 def roundToPowerOf2(sz):
     ''' Rounds to the smallest power of 2 that is not less than @sz. Ex.:
     2 => 2, 50 => 64'''
-    if sz == 0:
-        return 0
-    r = 1
-    num = sz
-    while num:
-        num >>= 1
-        r *= 2
-    if r == 2 * sz:
-        r = sz
-    return r
+    if (sz & (sz - 1) == 0):
+        return sz
+    p = 0
+    while sz:
+        sz >>= 1
+        p += 1
+    return (1 << p)
 
 import os
 import re
@@ -149,9 +146,9 @@ class FixszPDS(object):
     def _getStorPool(self, recsize):
         ''' Returns a stor pool of @recsize, the stor pool is created if one
         doesn't exists '''
-        recsize = roundToPowerOf2(recsize)
         if recsize == 0:
             raise ValueError("There is no zero sized storage pool.")
+        recsize = roundToPowerOf2(recsize)
         fname = FixszPDS.nameOfStorfile(recsize)
         if fname in self._stor_pools:
             return self._stor_pools[fname]

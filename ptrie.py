@@ -392,6 +392,43 @@ class Ptrie(object):
             # not found
             return trie
 
+    def inspect(self, trie):
+        ''' Prints a saved trie and at the same time prints fixszPDS's record for
+        comparison. The trie must be saved before doing this to ensure that all cache
+        entries are flushded to storage. Here "save" means to flush all cache entries,
+        normally done with an ''ofs.store()''. '''
+        level = -1
+        odict = {}
+        for node in self.bfiter(trie):
+            fields =self.getfields(node)
+            prefix = fields['prefix']
+            if fields['final']:
+                pfxString = "(%s : %s)" % (fields['prefix'], fields['value'])
+            else:
+                assert(fields['value'] is None)
+                pfxString = prefix
+            # Add debug info and store them into a dict of lists
+            sz = node.oid.size
+            oidvalue = node.oid.oid
+            pfxString += " (size:%x oidvalue:%d)" % (sz, oidvalue)
+            if sz not in odict:
+                odict[sz] = []
+            olist = odict[sz]
+            olist.append((pfxString, sz, oidvalue))
+            # Print bfwalk tree
+            if len(prefix) != level:
+                level += 1
+                print "level %d:" % level
+            print pfxString
+        # Now sort onodes according to oidvalue (this is an offset within the file)
+        for sz in odict:
+            olist = odict[sz]
+            olist.sort(key=lambda n: n[2])
+        for sz in odict:
+            print "size %d:" % sz
+            for node in odict[sz]:
+                print "%04d: '%s'" % (node[2], node[0])
+
 
 class PtriePathFinder(object):
     ''' A Helper class that specializes in finding a node in a ptrie and saves
@@ -491,4 +528,3 @@ class PtriePathFinder(object):
         mid = "(" + string[endpos-1:endpos] + ")"
         back = string[endpos:]
         return front + mid + back
-

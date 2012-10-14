@@ -92,7 +92,7 @@ class OidFS(object):
             self._rootoid = self._readRootoid()
 
     def close(self):
-        self.gc()
+        #self.gc()
         self._oidPstor.close()
 
     def _store(self, o, oname):

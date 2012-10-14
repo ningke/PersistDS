@@ -214,8 +214,7 @@ class PDSCache(object):
             # This coid has already been written (to PStor). It won't ever
             # change.
             return coid.oid
-        # Now this coid MUST be in cache, otherwise it would be a "phantom"
-        # coid...
+        # Now this coid MUST be in cache, otherwise it would be a "phantom" coid...
         assert(coid.seqnum in self._cache)
         centry = self._cache[coid.seqnum]
         # ''ofields'' MUST contain only native Python objects or a "real" OID
@@ -319,8 +318,7 @@ class PDSCache(object):
                 _cprof.hitcnt += 1
             return self._cache_ofields(centry.ofields)
         except KeyError:
-            # This Oid Cache has been moved to pstor, we have to get it back
-            # first
+            # This Oid Cache has been moved to pstor, we have to get it back first.
             #print "Getting coid (%d) from PStor" % coid.seqnum
             assert(coid.oid is not None)
             ofields = coid.pstor.getrec(coid.oid)
@@ -394,7 +392,7 @@ class _CacheProf(object):
 _cprof = None
 
 # Cache Size (Number of cache entries)
-_pdscache_size = 256
+_pdscache_size = 8192
 # This is the global singleton PDS cache object that everyone uses.
 _pdscache = PDSCache(_pdscache_size)
 print "PDSCache %s: Size %d" % (_pdscache, _pdscache_size)
