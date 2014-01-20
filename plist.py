@@ -97,9 +97,9 @@ if __name__ == '__main__':
     global_pstor, oidfs = ostore.init_ostore()
     plistObj = Plist(global_pstor)
 
-    ll = plistObj.plist('Angela', 'Austin', 'Ning', 'Qi')
+    ll = plistObj.plist('Smurfette', 'Tracker', 'Lazy', 'Brainy')
     print ll
-    ll = plistObj.insertAfter(ll, 'Austin', 'Baba')
+    ll = plistObj.insertAfter(ll, 'Tracker', 'PapaSmurf')
     res = plistObj.map(lambda n: "*" + n + "*", ll)
     print res
 

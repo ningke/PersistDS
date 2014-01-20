@@ -104,7 +104,7 @@ class PStruct(object):
         ''' pass fields in keyword args '''
         fields = self._dict2List(kwargs)
         return self._make(pstor, fields)
-    
+
     def checkType(self, o):
         if o.name != self.sname:
             raise TypeError("Wrong OID type: Expecting %s, got %s"

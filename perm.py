@@ -54,26 +54,30 @@ class Perm(object):
         self.root = self.ptrieObj.insert(self.root, seq, None, None)
         self.count += 1
 
-    def inspect(self):
-        myname = "random_permutations"
+    def bfwalk(self):
         before = time.clock()
         for node in self.ptrieObj.bfiter(self.root):
             pass
-        print "Before GC, BF trie walk took %d seconds" % (time.clock() - before)
+        print "BF trie walk took %f seconds" % (time.clock() - before)
+        self.pstor.print_stats()
+
+    def inspect(self):
+        myname = "random_permutations"
+        print "bfwalk 1:"
+        self.bfwalk()
         before = time.clock()
         self.ofs.store(self.root, myname)
-        print "Storing took %d seconds" % (time.clock() - before)
+        print "Storing took %f seconds" % (time.clock() - before)
         self.pstor.print_stats()
         print "Doing GC"
         before = time.clock()
         self.ofs.gc()
-        print "GC took %d seconds" % (time.clock() - before)
+        print "GC took %f seconds" % (time.clock() - before)
         self.root = self.ofs.load(myname)
-        before = time.clock()
-        for node in self.ptrieObj.bfiter(self.root):
-            pass
-        print "BF trie walk took %d seconds" % (time.clock() - before)
-        self.pstor.print_stats()
+        print "bfwalk 2:"
+        self.bfwalk()
+        print "bfwalk 3:"
+        self.bfwalk()
 
     def close(self):
         self.ofs.store(self.root, "random_permutations")
@@ -94,6 +98,7 @@ if __name__ == "__main__":
     pm = Perm()
     before = time.clock()
     for s in rand_perm(seq):
+        #print "Inserting '%s'" % s
         pm.insert(s)
     print "%d permutations total. %d seconds" % \
         (math.factorial(n), time.clock() - before)
