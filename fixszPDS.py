@@ -130,7 +130,7 @@ class FixszPDS(object):
         ''' Call this method when done'''
         for fname, spool in self._stor_pools.items():
             #print "Closing %s" % fname
-            spool.fobj.close()
+            spool.close()
 
     def expunge(self):
         ''' Delete or otherwise Invalidate all records in the storage and

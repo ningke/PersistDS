@@ -248,11 +248,11 @@ class PStructStor(object):
         (self.accessed_tot_oids, self.accessed_tot_jumps,
          self.accessed_avg_chld_distance) = self.cumulate_stats(statstup, o, ofields)
         return (forwardOidval, ofields)
-    
+
     def getrec(self, o):
         unused, oidfields = self._getrec(self.active_pds, o)
         return oidfields
-    
+
     def close(self):
         self.active_pds.close()
         self.standby_pds.close()

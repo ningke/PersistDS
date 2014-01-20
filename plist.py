@@ -1,11 +1,11 @@
 # Copyright 2012 Ning Ke
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 # http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,12 +27,12 @@ nodePS = PStruct.mkpstruct('node',
 class Plist(object):
     ''' Plist class is simply a wrapper for nodePS. It is initialized with a
     PStructStor so OIDs can be made in somewhere. '''
-    
+
     def __init__(self, pstor):
         ''' Initialize with a PStructStor. All nodePS OIDs will be made in
         that pstor '''
         self.pstor = pstor
-        
+
     def cons(self, val, lnode):
         return nodePS.make(self.pstor, value=val, nxt=lnode)
 
@@ -102,6 +102,17 @@ if __name__ == '__main__':
     ll = plistObj.insertAfter(ll, 'Tracker', 'PapaSmurf')
     res = plistObj.map(lambda n: "*" + n + "*", ll)
     print res
+
+    # save
+    oidfs.store(ll, "The Smurfs")
+    oidfs.gc()
+
+    # load
+    global_pstor, oidfs = ostore.init_ostore()
+    ll = oidfs.load("The Smurfs")
+    print "Loaded from OidFS:"
+    plistObj = Plist(global_pstor)
+    print plistObj.map(lambda n: "*" + n + "*", ll)
 
     oidfs.close()
     global_pstor.close()

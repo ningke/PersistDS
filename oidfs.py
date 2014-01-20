@@ -153,7 +153,7 @@ class OidFS(object):
         # Now send to pstructstor for GC and essentially re-create our
         # internal oid ptrie with new oid values
         for pstor in pstordict:
-            ovalues = pstordict[pstor][1]
+            onames, ovalues = pstordict[pstor]
             pstordict[pstor][1] = ovalues = pstor.keepOids(ovalues)
             for oname, o in zip(onames, ovalues):
                 self._store(o, oname)
